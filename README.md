@@ -1,9 +1,5 @@
 ![L1337Xi SENTINEL — Advanced Security Operations Platform](banner.png)
 
-<p align="center">
-  <img src="logo.png" alt="L1337Xi SENTINEL emblem" width="132" />
-</p>
-
 **A local-first Security Operations Center (SOC) and digital forensics workbench.**
 
 SENTINEL is a self-hosted security operations platform under active development. Its goal is to give analysts one local workspace for collecting security telemetry, investigating detections, preserving evidence, and documenting incidents—without requiring paid SaaS services or hosted AI APIs.
