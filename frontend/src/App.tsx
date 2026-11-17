@@ -65,7 +65,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><div className="brand-mark">S</div><div><strong>SENTINEL</strong><span> L1337XI SECURITY</span></div></div>
+        <div className="brand"><img className="brand-logo" src="/logo.jpg" alt="" /><div><strong>SENTINEL</strong><span> L1337XI SECURITY</span></div></div>
         <div className="nav-label">WORKSPACE</div>
         <a className="nav-item active" href="#overview"><span>◈</span> Overview</a>
         <a className="nav-item" href="#events"><span>▤</span> Event stream</a>
