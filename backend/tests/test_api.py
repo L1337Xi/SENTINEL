@@ -1,0 +1,68 @@
+from fastapi.testclient import TestClient
+
+from app import database
+from app.main import app
+
+
+def test_health():
+    with TestClient(app) as client:
+        response = client.get("/api/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+def test_event_ingest_list_and_filter(tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "DATABASE_PATH", tmp_path / "test.db")
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/events",
+            json={
+                "source": "pytest",
+                "event_type": "authentication",
+                "severity": "high",
+                "message": "Repeated failed login attempts",
+                "host": "lab-host",
+                "occurred_at": "2026-11-17T12:00:00Z",
+                "metadata": {"attempts": 8},
+            },
+        )
+        assert created.status_code == 201
+        event = created.json()
+        assert event["metadata"]["attempts"] == 8
+
+        listed = client.get("/api/events", params={"severity": "high", "search": "failed"})
+        assert listed.status_code == 200
+        assert listed.json()["total"] == 1
+        assert listed.json()["items"][0]["id"] == event["id"]
+
+        fetched = client.get(f"/api/events/{event['id']}")
+        assert fetched.status_code == 200
+        assert fetched.json()["source"] == "pytest"
+
+
+def test_rejects_invalid_severity():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/events",
+            json={
+                "source": "pytest",
+                "event_type": "test",
+                "severity": "extreme",
+                "message": "Invalid severity",
+            },
+        )
+    assert response.status_code == 422
+
+
+def test_rejects_naive_timestamp():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/events",
+            json={
+                "source": "pytest",
+                "event_type": "test",
+                "message": "Missing timezone",
+                "occurred_at": "2026-11-17T12:00:00",
+            },
+        )
+    assert response.status_code == 422
