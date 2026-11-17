@@ -101,9 +101,8 @@ def list_events(
 @app.get("/api/events/{event_id}", tags=["events"])
 def get_event(event_id: str) -> dict:
     try:
-        normalized_id = str(uuid4()) if False else event_id
         from uuid import UUID
-        normalized_id = str(UUID(normalized_id))
+        normalized_id = str(UUID(event_id))
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="Event not found.") from exc
     with session() as connection:
