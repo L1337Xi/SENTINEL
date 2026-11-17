@@ -1,7 +1,7 @@
 """Validated API models."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -18,7 +18,7 @@ class EventCreate(BaseModel):
     severity: Severity = "low"
     message: str = Field(min_length=1, max_length=4000)
     host: str | None = Field(default=None, max_length=255)
-    occurred_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("source", "event_type", "message")
@@ -34,7 +34,7 @@ class EventCreate(BaseModel):
     def require_timezone(cls, value: datetime) -> datetime:
         if value.tzinfo is None:
             raise ValueError("occurred_at must include a timezone.")
-        return value.astimezone(timezone.utc)
+        return value.astimezone(UTC)
 
 
 class EventRecord(EventCreate):
