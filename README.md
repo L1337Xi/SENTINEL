@@ -71,7 +71,7 @@ Local evidence and report storage
 
 ### Technology
 
-- Backend: Python 3.11+, FastAPI, Pydantic, SQLAlchemy, SQLite.
+- Backend: Python 3.11+, FastAPI, Pydantic, Python's SQLite driver.
 - Frontend: React, TypeScript, Vite.
 - API: REST/JSON.
 - Planned integrations: Sigma, YARA, Zeek, Suricata, Scapy, and platform-specific event sources.
@@ -80,12 +80,12 @@ Local evidence and report storage
 ## Repository layout
 
 ```text
-backend/       API application and tests
-frontend/      React/TypeScript analyst interface
-config/        Example application configuration
-datasets/      Synthetic test data and dataset notes
+backend/app/   API routes, validation, and SQLite persistence
+backend/tests/ API tests
+frontend/src/  React/TypeScript analyst interface
+.github/       Continuous integration workflow
 docs/          Architecture, security guidance, and roadmap
-storage/       Local evidence, imports, logs, and reports
+storage/       Reserved for local evidence (not committed)
 ```
 
 ## Requirements
@@ -122,7 +122,7 @@ In a second terminal:
 ```bash
 cd frontend
 npm install
-npm run dev -- --host 127.0.0.1 --port 5176
+npm run dev
 ```
 
 Dashboard: `http://127.0.0.1:5176`
@@ -144,7 +144,7 @@ curl --fail-with-body -X POST http://127.0.0.1:8787/api/events \
     "severity": "low",
     "message": "Example successful login",
     "host": "lab-linux",
-    "timestamp": "2026-11-17T12:00:00Z",
+    "occurred_at": "2026-11-17T12:00:00Z",
     "metadata": {"user": "analyst", "result": "success"}
   }'
 ```
@@ -155,7 +155,7 @@ Retrieve events:
 curl --fail http://127.0.0.1:8787/api/events
 ```
 
-Confirm the current database path and configuration in the backend settings before using non-test data.
+The default database is created at `backend/data/sentinel.db`. This directory is excluded from Git.
 
 ## Security notes
 
