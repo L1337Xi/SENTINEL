@@ -1,4 +1,8 @@
-# L1337XI SENTINEL
+![L1337Xi SENTINEL — Advanced Security Operations Platform](banner.png)
+
+<p align="center">
+  <img src="logo.png" alt="L1337Xi SENTINEL emblem" width="132" />
+</p>
 
 **A local-first Security Operations Center (SOC) and digital forensics workbench.**
 
