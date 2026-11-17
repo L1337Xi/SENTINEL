@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query
@@ -42,7 +42,7 @@ def health() -> dict[str, str]:
 @app.post("/api/events", status_code=201, tags=["events"])
 def create_event(payload: EventCreate) -> dict:
     event_id = str(uuid4())
-    ingested_at = datetime.now(timezone.utc).isoformat()
+    ingested_at = datetime.now(UTC).isoformat()
     values = (
         event_id,
         payload.source,
