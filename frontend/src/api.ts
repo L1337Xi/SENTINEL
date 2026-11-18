@@ -48,4 +48,11 @@ export const api = {
   networks: () => request<{ items: NetworkInterface[] }>("/api/scanner/networks"),
   startSystemScan: () => request<{ id: string; status: string }>("/api/scans/system", { method: "POST" }),
   startNetworkScan: (network: string) => request<{ id: string; status: string }>("/api/scans/network", { method: "POST", body: JSON.stringify({ network }) }),
+  investigateFinding: (scanId: string, findingId: string) =>
+    request<Record<string, unknown>>(`/api/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}/investigate`, { method: "POST" }),
+  respondToFinding: (scanId: string, findingId: string, action: "quarantine" | "delete", confirmation = "") =>
+    request<Record<string, unknown>>(`/api/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}/response`, { method: "POST", body: JSON.stringify({ action, confirmation }) }),
+  quarantine: () => request<{ items: Record<string, unknown>[] }>("/api/quarantine"),
+  restoreQuarantine: (id: string) =>
+    request<Record<string, unknown>>(`/api/quarantine/${encodeURIComponent(id)}/restore`, { method: "POST" }),
 };
