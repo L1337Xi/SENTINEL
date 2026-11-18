@@ -56,7 +56,6 @@ def test_rejects_naive_timestamp():
 
 def test_scanner_network_scope_rejects_public_and_broad_ranges():
     import pytest
-
     from app.scanner import validate_local_network
     with pytest.raises(ValueError):
         validate_local_network("8.8.8.0/24")
