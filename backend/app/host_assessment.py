@@ -137,6 +137,9 @@ def _clamav_scan(root: Path, timeout: int = 90,
                             "path": file_path, "evidence": line, "confidence": "high",
                             "source": "clamav", "engine": "ClamAV",
                         })
+                        if progress_callback:
+                            progress_callback({"current_path": current_path,
+                                               "clamav_files_scanned": files_scanned})
                     elif line.endswith(": OK"):
                         current_path = line.rsplit(": ", 1)[0]
                         files_scanned += 1
