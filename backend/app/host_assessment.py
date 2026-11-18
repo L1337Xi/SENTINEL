@@ -133,8 +133,9 @@ def _clamav_scan(root: Path, timeout: int = 90,
                             "id": f"clamav-{hashlib.sha256(line.encode()).hexdigest()[:12]}",
                             "category": "malware", "severity": "high",
                             "title": signature.removesuffix(" FOUND"),
-                            "description": "ClamAV signature detection. Treat as a strong lead and preserve the sample for controlled analysis.",
-                            "path": file_path, "evidence": line, "confidence": "high",
+                            "description": "ClamAV signature match. This is an important detection lead, not standalone proof of infection; investigate file provenance and corroborating evidence before remediation.",
+                            "path": file_path, "evidence": line, "confidence": "medium",
+                            "assessment": "unverified", "assessment_confidence": "pending_investigation",
                             "source": "clamav", "engine": "ClamAV",
                         })
                         if progress_callback:
@@ -172,8 +173,9 @@ def _clamav_scan(root: Path, timeout: int = 90,
                     "id": f"clamav-{hashlib.sha256(line.encode()).hexdigest()[:12]}",
                     "category": "malware", "severity": "high",
                     "title": signature.removesuffix(" FOUND"),
-                    "description": "ClamAV signature detection. Treat as a strong lead and preserve the sample for controlled analysis.",
-                    "path": file_path, "evidence": line, "confidence": "high",
+                    "description": "ClamAV signature match. This is an important detection lead, not standalone proof of infection; investigate file provenance and corroborating evidence before remediation.",
+                    "path": file_path, "evidence": line, "confidence": "medium",
+                    "assessment": "unverified", "assessment_confidence": "pending_investigation",
                     "source": "clamav", "engine": "ClamAV",
                 })
         return {"available": True, "executed": True, "version": version,
@@ -485,7 +487,14 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
             })
     report_progress("clamav", None, force=True)
     clamav = _clamav_scan(root_path, progress_callback=report_clamav_progress)
-    findings.extend(clamav["findings"])
+    for detection in clamav["findings"]:
+        matched_hashes = scanned_hashes.get(str(detection.get("path", "")), [])
+        if matched_hashes:
+            detection["sha256"] = next(
+                (digest for digest, paths in scanned_hashes.items()
+                 if str(detection.get("path", "")) in paths), None
+            )
+        findings.append(detection)
     report_progress("configuration", None, force=True)
     posture = _security_posture()
     persistence = _persistence_inventory()
