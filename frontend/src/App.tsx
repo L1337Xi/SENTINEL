@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, type AlertRecord, type NetworkInterface, type ScanRecord, type SecurityEvent, type Severity } from "./api";
+import DoodleCrewFooter from "@/components/ui/doodle-crew-footer";
 
 type View = "overview" | "events" | "alerts" | "host" | "network";
 const severityOrder: Severity[] = ["critical", "high", "medium", "low"];
@@ -162,7 +163,7 @@ export default function App() {
         {view === "alerts" && <AlertsView alerts={alerts} onChangeStatus={changeAlertStatus} onRefresh={() => void refresh()} />}
         {view === "host" && <HostView scan={activeScan?.scan_type === "system" ? activeScan : scans.find((scan) => scan.scan_type === "system") ?? null} scans={scans} busy={busy} onStart={() => void startScan("system")} />}
         {view === "network" && <NetworkView networks={networks} selected={selectedNetwork} setSelected={setSelectedNetwork} scan={activeScan?.scan_type === "network" ? activeScan : scans.find((scan) => scan.scan_type === "network") ?? null} scans={scans} busy={busy} onStart={() => void startScan("network")} onReload={() => void loadNetworks()} />}
-        <footer className="sentinel-footer"><span><b>SENTINEL</b> / LOCAL SECURITY OPERATIONS</span><span>TELEMETRY STAYS ON THIS MACHINE</span><span>BUILD 0.2.0</span></footer>
+        <DoodleCrewFooter wordmark="SENTINEL" brand="L1337XI SENTINEL" blurb="A local-first security operations workspace. Built for analysts who value evidence, clarity and control." tagline="Stay curious. Verify everything. Preserve the evidence." copyright="© 2026 L1337Xi. All rights reserved." />
       </main>
     </div>
   );
