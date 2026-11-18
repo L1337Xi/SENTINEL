@@ -14,3 +14,9 @@ This is an early development foundation, not a production SOC platform.
 - Review dependency updates and run tests before deploying changes.
 
 Report security issues privately to the repository owner rather than publishing sensitive exploit details.
+
+- ClamAV signature matches are preserved as detections but begin as unverified leads; do not equate signature severity with confirmed infection or malware-assessment confidence.
+- File investigation is read-only: it checks file identity/type, hashes, Debian package ownership/integrity and available package-source context. Package evidence can support a likely-false-positive assessment but is not proof of safety.
+- Quarantine and permanent deletion are explicit local administrative actions. Quarantine verifies a stored copy and hash before removing the original, uses restricted local permissions, and supports hash-verified restore. Permanent deletion requires the full SHA-256 confirmation phrase.
+- Package-managed files, hard-linked files, symlinks, and protected system/package paths are not eligible for quarantine or permanent deletion. Use the OS package manager for package-managed software.
+- Keep the backend loopback-only: these response endpoints are not authenticated for remote use and must never be exposed to a LAN or the internet.
