@@ -21,6 +21,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .threat_intel import fetch_recent_malware, match_recent_hashes
+
 DEFAULT_EXCLUDES = {
     "/proc", "/sys", "/dev", "/run", "/var/cache", "/var/tmp",
     "/.git", "/node_modules", "/.venv", "/venv", "/__pycache__",
@@ -291,6 +293,7 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
     root_path = Path(root).resolve()
     indicators = _load_indicators()
     findings: list[dict[str, Any]] = []
+    scanned_hashes: dict[str, list[str]] = {}
     capabilities: list[dict[str, str]] = []
     files_seen = 0
     files_hashed = 0
@@ -350,6 +353,7 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
                 sha256 = digest.hexdigest()
                 files_hashed += 1
                 bytes_hashed += info.st_size
+                scanned_hashes.setdefault(sha256, []).append(str(path))
                 mode = stat.S_IMODE(info.st_mode)
                 matched = indicators.get(sha256)
                 if matched:
@@ -377,6 +381,10 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
                 skipped_unreadable += 1
         if truncated:
             break
+
+    report_progress("threat_intelligence", None, force=True)
+    malwarebazaar = fetch_recent_malware()
+    findings.extend(match_recent_hashes(scanned_hashes, malwarebazaar))
 
     report_progress("clamav", None, force=True)
     clamav = _clamav_scan(root_path)
@@ -412,10 +420,11 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
         "privileged_accounts": accounts,
         "malware_engines": {"clamav": {key: value for key, value in clamav.items() if key != "findings"}},
         "threat_intelligence": {
-            "source": os.environ.get("SENTINEL_HASH_DB", "/etc/sentinel/hash_iocs.json"),
+            "local_indicator_source": os.environ.get("SENTINEL_HASH_DB", "/etc/sentinel/hash_iocs.json"),
             "local_indicators_loaded": len(indicators),
-            "network_lookup": False,
-            "note": "No remote feed or built-in malware database is used. A hash match is exact; absence of a match does not establish that a file is safe.",
+            "network_lookup": malwarebazaar.get("status") == "ok",
+            "malwarebazaar": {key: value for key, value in malwarebazaar.items() if key != "entries"},
+            "note": "MalwareBazaar checks only its latest 100 additions. A feed match is an exact hash indicator; no match does not establish that a file is safe.",
         },
         "limitations": [
             f"Skipped files larger than {max_file_bytes} bytes: {skipped_large}",
