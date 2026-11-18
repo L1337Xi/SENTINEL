@@ -178,7 +178,7 @@ def update_scan(
     values.append(scan_id)
     with session() as connection:
         connection.execute(
-            f"UPDATE scans SET {", ".join(assignments)} WHERE id = ?", values
+            "UPDATE scans SET " + ", ".join(assignments) + " WHERE id = ?", values
         )
 
 def row_to_scan(row: sqlite3.Row) -> dict:
