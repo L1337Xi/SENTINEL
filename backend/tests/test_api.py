@@ -1,5 +1,4 @@
 import pytest
-
 from app import database
 from app.main import app
 from app.scanner import validate_local_network
