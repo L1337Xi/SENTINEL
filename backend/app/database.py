@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS scans (
     started_at TEXT NOT NULL,
     completed_at TEXT,
     result TEXT,
-    error TEXT
+    error TEXT,
+    progress TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_scans_started_at ON scans(started_at DESC);
 CREATE TABLE IF NOT EXISTS alerts (
@@ -136,6 +137,9 @@ def session() -> Iterator[sqlite3.Connection]:
 def initialize_database() -> None:
     with session() as connection:
         connection.executescript(SCHEMA)
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(scans)")}
+        if "progress" not in columns:
+            connection.execute("ALTER TABLE scans ADD COLUMN progress TEXT")
 
 
 def row_to_event(row: sqlite3.Row) -> dict:
@@ -152,17 +156,35 @@ def create_scan(scan_id: str, scan_type: str, target: str, started_at: str) -> N
         )
 
 
-def update_scan(scan_id: str, *, status: str, result: dict | None = None, error: str | None = None, completed_at: str | None = None) -> None:
+def update_scan(
+    scan_id: str, *, status: str, result: dict | None = None,
+    error: str | None = None, completed_at: str | None = None,
+    progress: dict | None = None,
+) -> None:
+    assignments = ["status = ?"]
+    values: list[object] = [status]
+    if result is not None:
+        assignments.append("result = ?")
+        values.append(json.dumps(result, separators=(",", ":"), ensure_ascii=False))
+    if error is not None:
+        assignments.append("error = ?")
+        values.append(error)
+    if completed_at is not None:
+        assignments.append("completed_at = ?")
+        values.append(completed_at)
+    if progress is not None:
+        assignments.append("progress = ?")
+        values.append(json.dumps(progress, separators=(",", ":"), ensure_ascii=False))
+    values.append(scan_id)
     with session() as connection:
         connection.execute(
-            "UPDATE scans SET status = ?, result = ?, error = ?, completed_at = ? WHERE id = ?",
-            (status, json.dumps(result, separators=(",", ":"), ensure_ascii=False) if result is not None else None, error, completed_at, scan_id),
+            f"UPDATE scans SET {", ".join(assignments)} WHERE id = ?", values
         )
-
 
 def row_to_scan(row: sqlite3.Row) -> dict:
     item = dict(row)
     item["result"] = json.loads(item["result"]) if item["result"] else None
+    item["progress"] = json.loads(item["progress"]) if item.get("progress") else None
     return item
 
 def append_audit(
