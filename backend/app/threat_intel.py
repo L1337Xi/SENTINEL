@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 import os
 import re
-import time
 import threading
+import time
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
