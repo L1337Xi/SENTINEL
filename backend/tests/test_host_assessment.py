@@ -22,6 +22,7 @@ def test_hash_indicator_match_is_reported_without_modifying_file(tmp_path, monke
     }))
     monkeypatch.setenv("SENTINEL_HASH_DB", str(indicator_file))
     monkeypatch.setattr(host_assessment, "_security_posture", lambda: {"checks": [], "firewall_tools": []})
+    monkeypatch.setattr(host_assessment, "_clamav_scan", lambda root: {"available": False, "executed": False, "findings": [], "note": "mocked"})
 
     result = host_assessment.run_host_assessment(str(tmp_path), max_files=20, max_seconds=5)
 
