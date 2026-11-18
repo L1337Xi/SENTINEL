@@ -28,3 +28,16 @@ def test_normal_does_not_include_advanced_features(monkeypatch):
     manifest = editions.edition_manifest()
     advanced = next(item for item in manifest["features"] if item["id"] == "sandbox_analysis")
     assert advanced["included"] is False
+
+
+
+def test_edition_api_reports_default_normal_mode(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.delenv("SENTINEL_EDITION", raising=False)
+    with TestClient(app) as client:
+        response = client.get("/api/edition")
+    assert response.status_code == 200
+    assert response.json()["edition"] == "normal"
+    assert response.json()["license_enforcement"] == "not_implemented"
