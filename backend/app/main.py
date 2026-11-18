@@ -12,15 +12,20 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import CORS_ORIGINS, MAX_PAGE_SIZE
 from .database import (
+    create_alert,
     create_scan,
     initialize_database,
+    list_alerts,
+    row_to_alert,
     row_to_event,
     row_to_scan,
     session,
+    update_alert,
     update_scan,
 )
+from .detections import RULES, evaluate_event
 from .scanner import network_discovery, system_inventory, validate_local_network
-from .schemas import EventCreate, EventPage, NetworkScanCreate
+from .schemas import AlertUpdate, EventCreate, EventPage, NetworkScanCreate
 
 app = FastAPI(
     title="L1337XI SENTINEL API",
@@ -64,7 +69,13 @@ def create_event(payload: EventCreate) -> dict:
             values,
         )
         row = connection.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
-    return row_to_event(row)
+    event = row_to_event(row)
+    for match in evaluate_event(event):
+        create_alert(
+            str(uuid4()), event_id, match["rule_id"], match["title"],
+            match["severity"], match["description"], ingested_at,
+        )
+    return event
 
 
 @app.get("/api/events", response_model=EventPage, tags=["events"])
@@ -161,3 +172,30 @@ def start_network_scan(payload: NetworkScanCreate, background_tasks: BackgroundT
 def available_networks() -> dict:
     from .scanner import local_networks
     return {"items": local_networks()}
+
+
+
+@app.get("/api/detection-rules", tags=["alerts"])
+def list_detection_rules() -> dict:
+    return {"items": list(RULES)}
+
+
+@app.get("/api/alerts", tags=["alerts"])
+def get_alerts(
+    status: str | None = Query(default=None, pattern="^(open|acknowledged|resolved)$"),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict:
+    rows = list_alerts(status, limit)
+    return {"items": [row_to_alert(row) for row in rows], "total": len(rows)}
+
+
+@app.patch("/api/alerts/{alert_id}", tags=["alerts"])
+def change_alert_status(alert_id: str, payload: AlertUpdate) -> dict:
+    try:
+        normalized_id = str(UUID(alert_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Alert not found.") from exc
+    row = update_alert(normalized_id, payload.status, datetime.now(UTC).isoformat())
+    if row is None:
+        raise HTTPException(status_code=404, detail="Alert not found.")
+    return row_to_alert(row)

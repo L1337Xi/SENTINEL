@@ -1,6 +1,9 @@
+import pytest
+from fastapi.testclient import TestClient
+
 from app import database
 from app.main import app
-from fastapi.testclient import TestClient
+from app.scanner import validate_local_network
 
 
 def test_health():
@@ -55,8 +58,6 @@ def test_rejects_naive_timestamp():
 
 
 def test_scanner_network_scope_rejects_public_and_broad_ranges():
-    import pytest
-    from app.scanner import validate_local_network
     with pytest.raises(ValueError):
         validate_local_network("8.8.8.0/24")
     with pytest.raises(ValueError):
@@ -77,8 +78,55 @@ def test_network_schema_rejects_extra_fields():
 
 
 def test_scanner_rejects_ipv6_networks():
-    import pytest
-
-    from app.scanner import validate_local_network
     with pytest.raises(TypeError):
         validate_local_network("fd00::/64")
+
+
+
+def test_detection_creates_alert_and_supports_lifecycle(tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "DATABASE_PATH", tmp_path / "alerts.db")
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/events",
+            json={
+                "source": "auth-agent",
+                "event_type": "authentication_failure",
+                "severity": "medium",
+                "message": "Repeated login failures",
+                "host": "lab-host",
+                "metadata": {"failed_attempts": 7},
+            },
+        )
+        assert created.status_code == 201
+        alerts = client.get("/api/alerts", params={"status": "open"})
+        assert alerts.status_code == 200
+        assert alerts.json()["total"] == 1
+        alert = alerts.json()["items"][0]
+        assert alert["rule_id"] == "AUTH-001"
+        assert alert["severity"] == "high"
+        updated = client.patch(
+            f"/api/alerts/{alert['id']}", json={"status": "acknowledged"}
+        )
+        assert updated.status_code == 200
+        assert updated.json()["status"] == "acknowledged"
+        resolved = client.patch(
+            f"/api/alerts/{alert['id']}", json={"status": "resolved"}
+        )
+        assert resolved.status_code == 200
+        assert resolved.json()["status"] == "resolved"
+
+
+def test_detection_ignores_auth_events_below_threshold(tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "DATABASE_PATH", tmp_path / "no-alert.db")
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/events",
+            json={
+                "source": "auth-agent",
+                "event_type": "authentication_failure",
+                "message": "Single failed login",
+                "metadata": {"attempts": 2},
+            },
+        )
+        assert response.status_code == 201
+        assert client.get("/api/alerts").json()["total"] == 0

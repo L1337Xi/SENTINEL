@@ -35,6 +35,19 @@ CREATE TABLE IF NOT EXISTS scans (
     error TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_scans_started_at ON scans(started_at DESC);
+CREATE TABLE IF NOT EXISTS alerts (
+    id TEXT PRIMARY KEY,
+    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    rule_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    severity TEXT NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+    status TEXT NOT NULL CHECK (status IN ('open', 'acknowledged', 'resolved')),
+    description TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(event_id, rule_id)
+);
+CREATE INDEX IF NOT EXISTS idx_alerts_status_created ON alerts(status, created_at DESC);
 """
 
 
@@ -92,3 +105,40 @@ def row_to_scan(row: sqlite3.Row) -> dict:
     item = dict(row)
     item["result"] = json.loads(item["result"]) if item["result"] else None
     return item
+
+def create_alert(
+    alert_id: str, event_id: str, rule_id: str, title: str, severity: str,
+    description: str, created_at: str,
+) -> None:
+    with session() as connection:
+        connection.execute(
+            """INSERT OR IGNORE INTO alerts
+            (id, event_id, rule_id, title, severity, status, description, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?)""",
+            (alert_id, event_id, rule_id, title, severity, description, created_at, created_at),
+        )
+
+
+def list_alerts(status: str | None, limit: int) -> list[sqlite3.Row]:
+    with session() as connection:
+        if status:
+            return connection.execute(
+                "SELECT * FROM alerts WHERE status = ? ORDER BY created_at DESC LIMIT ?",
+                (status, limit),
+            ).fetchall()
+        return connection.execute(
+            "SELECT * FROM alerts ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+
+
+def update_alert(alert_id: str, status: str, updated_at: str) -> sqlite3.Row | None:
+    with session() as connection:
+        connection.execute(
+            "UPDATE alerts SET status = ?, updated_at = ? WHERE id = ?",
+            (status, updated_at, alert_id),
+        )
+        return connection.execute("SELECT * FROM alerts WHERE id = ?", (alert_id,)).fetchone()
+
+
+def row_to_alert(row: sqlite3.Row) -> dict:
+    return dict(row)

@@ -52,3 +52,8 @@ class EventPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class AlertUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["acknowledged", "resolved"]
