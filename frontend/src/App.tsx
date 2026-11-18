@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, type NetworkInterface, type ScanRecord, type SecurityEvent, type Severity } from "./api";
 
 type View = "overview" | "events" | "host" | "network";
@@ -156,10 +156,10 @@ export default function App() {
   );
 }
 
-function PageHeading({ eyebrow, title, description, children }: { eyebrow: string; title: string; description: string; children?: React.ReactNode }) {
+function PageHeading({ eyebrow, title, description, children }: { eyebrow: string; title: string; description: string; children?: ReactNode }) {
   return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{description}</p></div>{children && <div className="heading-actions">{children}</div>}</div>;
 }
-function ActionButton({ children, onClick, disabled = false, secondary = false }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; secondary?: boolean }) {
+function ActionButton({ children, onClick, disabled = false, secondary = false }: { children: ReactNode; onClick: () => void; disabled?: boolean; secondary?: boolean }) {
   return <button className={secondary ? "button button-secondary" : "button button-primary"} onClick={onClick} disabled={disabled}>{children}</button>;
 }
 function Overview({ events, total, counts, scans, busy, health, onNavigate, onStart, onAddSample }: {
