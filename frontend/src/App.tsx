@@ -61,6 +61,10 @@ export default function App() {
       const [status, page, history, alertPage] = await Promise.all([api.health(), api.events({ search: search.trim(), severity }), api.scans(), api.alerts()]);
       setHealth(status.status === "ok" ? "online" : "offline");
       setEvents(page.items); setTotal(page.total); setScans(history.items); setAlerts(alertPage.items); setError("");
+      setActiveScan((current) => {
+        if (current && ["queued", "running"].includes(current.status)) return current;
+        return history.items.find((item) => item.scan_type === "system" && ["queued", "running"].includes(item.status)) ?? current;
+      });
     } catch (err) {
       setHealth("offline");
       setError(err instanceof Error ? err.message : "Unable to reach the local SENTINEL API.");
