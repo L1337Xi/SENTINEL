@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { ArrowRight } from "lucide-react";
 import { api, type AlertRecord, type NetworkInterface, type ScanRecord, type SecurityEvent, type Severity } from "./api";
 import DoodleCrewFooter from "@/components/ui/doodle-crew-footer";
 
-type View = "overview" | "events" | "alerts" | "host" | "network";
+type View = "home" | "overview" | "events" | "alerts" | "host" | "network";
 const severityOrder: Severity[] = ["critical", "high", "medium", "low"];
 const navItems: { id: View; label: string; code: string }[] = [
+  { id: "home", label: "Home", code: "00" },
   { id: "overview", label: "Overview", code: "01" },
   { id: "events", label: "Event stream", code: "02" },
   { id: "alerts", label: "Detection alerts", code: "03" },
@@ -33,7 +35,7 @@ function statusLabel(status: ScanRecord["status"]): string {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>("overview");
+  const [view, setView] = useState<View>("home");
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [alerts, setAlerts] = useState<AlertRecord[]>([]);
   const [total, setTotal] = useState(0);
@@ -130,6 +132,8 @@ export default function App() {
     finally { setBusy(false); }
   }
 
+  if (view === "home") return <Landing health={health} onEnter={() => setView("overview")} onOpen={setView} />;
+
   const currentTitle = navItems.find((item) => item.id === view)?.label ?? "Overview";
 
   return (
@@ -146,7 +150,7 @@ export default function App() {
         </nav>
         <div className="side-bottom">
           <div className="instance-card"><span className={`status-dot ${health}`} /><div><strong>LOCAL INSTANCE</strong><small>{health === "online" ? "API connected" : health === "checking" ? "Checking connection" : "API unavailable"}</small></div></div>
-          <div className="side-version"><span>BUILD 0.2.0</span><span>LOCAL ONLY</span></div>
+          <div className="side-version"><span>BUILD 0.3.0</span><span>LOCAL ONLY</span></div>
         </div>
       </aside>
 
@@ -163,8 +167,36 @@ export default function App() {
         {view === "alerts" && <AlertsView alerts={alerts} onChangeStatus={changeAlertStatus} onRefresh={() => void refresh()} />}
         {view === "host" && <HostView scan={activeScan?.scan_type === "system" ? activeScan : scans.find((scan) => scan.scan_type === "system") ?? null} scans={scans} busy={busy} onStart={() => void startScan("system")} />}
         {view === "network" && <NetworkView networks={networks} selected={selectedNetwork} setSelected={setSelectedNetwork} scan={activeScan?.scan_type === "network" ? activeScan : scans.find((scan) => scan.scan_type === "network") ?? null} scans={scans} busy={busy} onStart={() => void startScan("network")} onReload={() => void loadNetworks()} />}
-        <DoodleCrewFooter wordmark="SENTINEL" brand="L1337XI SENTINEL" blurb="A local-first security operations workspace. Built for analysts who value evidence, clarity and control." tagline="Stay curious. Verify everything. Preserve the evidence." copyright="© 2026 L1337Xi. All rights reserved." />
       </main>
+    </div>
+  );
+}
+
+function Landing({ health, onEnter, onOpen }: { health: "checking" | "online" | "offline"; onEnter: () => void; onOpen: (view: View) => void }) {
+  const sections = navItems.filter((item) => item.id !== "home");
+  return (
+    <div className="landing">
+      <DoodleCrewFooter className="dcf-top landing-hero" backToTop={false} />
+      <section className="landing-console">
+        <div className="landing-console-head">
+          <div>
+            <span className="eyebrow">SECURITY OPERATIONS CONSOLE</span>
+            <h2>Analyst workspace</h2>
+            <p>Event intake, triage, host assessment and scoped discovery — served from this machine only. No cloud, no telemetry, no invented findings.</p>
+          </div>
+          <button className="button button-primary landing-enter" onClick={onEnter}>Enter console <ArrowRight size={15} /></button>
+        </div>
+        <div className="landing-sections">
+          {sections.map((item) => (
+            <button key={item.id} className="landing-section" onClick={() => onOpen(item.id)}>
+              <span className="nav-code">{item.code}</span>
+              <span>{item.label}</span>
+              <ArrowRight size={13} />
+            </button>
+          ))}
+        </div>
+        <div className="landing-state"><i className={health} />{health === "online" ? "Local API connected" : health === "checking" ? "Checking local API" : "Local API offline — start the backend to load live data"}</div>
+      </section>
     </div>
   );
 }
