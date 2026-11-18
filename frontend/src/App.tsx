@@ -391,7 +391,11 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
           <Resource label="SCRIPT INDICATORS" value={String(liveProgress.script_indicators ?? 0)} detail="Static indicators; not confirmed malware" />
           <Resource label="ELAPSED" value={`${Number(liveProgress.elapsed_seconds ?? 0).toFixed(1)} s`} detail={`Filesystem budget remaining: ${Number(liveProgress.time_budget_remaining ?? 180).toFixed(1)} s`} />
         </div>
-        <div className="live-current"><span className="meta-label">CURRENT FILE / LOCATION</span><code>{String(liveProgress.current_path ?? (progressPhase === "clamav" ? "ClamAV is scanning the configured filesystem scope…" : progressPhase === "threat intelligence" ? "Checking the latest MalwareBazaar hash feed…" : "Preparing assessment…"))}</code></div>
+        <div className="live-progress-track" role="progressbar" aria-label="Assessment activity" aria-valuetext={progressPhase}>
+          <span className="live-progress-indicator" />
+        </div>
+        {progressPhase === "clamav" && <Resource label="CLAMAV FILES SCANNED" value={String(liveProgress.clamav_files_scanned ?? 0)} detail="Files reported by ClamAV as its scan runs" />}
+        <div className="live-current"><span className="meta-label">{progressPhase === "clamav" ? "CLAMAV CURRENT FILE" : "CURRENT FILE / LOCATION"}</span><code>{String(liveProgress.current_path ?? (progressPhase === "clamav" ? "Waiting for ClamAV to report its first file…" : progressPhase === "threat intelligence" ? "Checking the latest MalwareBazaar hash feed…" : "Preparing assessment…"))}</code></div>
         <p className="live-note">Updates are polled from the local scanner. The filesystem time remaining is a scan budget, not a guaranteed completion ETA. ClamAV does not expose per-file progress in this scan mode.</p>
       </section>}
       {scan?.status === "failed" && <div className="scan-error">{scan.error ?? "The assessment failed."}</div>}
