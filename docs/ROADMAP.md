@@ -13,7 +13,8 @@
 - [ ] Evidence intake, hashing, metadata, and chain of custody
 - [ ] YARA-assisted analysis workflow
 - [ ] Offline PCAP analysis and optional Zeek/Suricata integrations
-- [ ] Audit trail, exports, reporting, backup, and restore
+- [x] Append-only local audit records for event ingestion, alert creation, and alert status transitions
+- [ ] Audit trail exports, reporting, backup, and restore
 - [ ] Packaging, threat modelling, and release hardening
 
 A checked item means the code has been added to the repository; it does not imply an independently audited production release.

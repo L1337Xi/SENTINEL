@@ -12,11 +12,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import CORS_ORIGINS, MAX_PAGE_SIZE
 from .database import (
+    append_audit,
     create_alert,
     create_scan,
     initialize_database,
     list_alerts,
+    list_audit_log,
     row_to_alert,
+    row_to_audit,
     row_to_event,
     row_to_scan,
     session,
@@ -37,7 +40,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["Content-Type"],
 )
 
@@ -70,6 +73,11 @@ def create_event(payload: EventCreate) -> dict:
         )
         row = connection.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
     event = row_to_event(row)
+    with session() as connection:
+        append_audit(
+            connection, "event", event_id, "event.ingested", ingested_at,
+            {"source": payload.source, "event_type": payload.event_type, "severity": payload.severity},
+        )
     for match in evaluate_event(event):
         create_alert(
             str(uuid4()), event_id, match["rule_id"], match["title"],
@@ -199,3 +207,12 @@ def change_alert_status(alert_id: str, payload: AlertUpdate) -> dict:
     if row is None:
         raise HTTPException(status_code=404, detail="Alert not found.")
     return row_to_alert(row)
+
+
+@app.get("/api/audit-log", tags=["audit"])
+def get_audit_log(
+    limit: int = Query(default=100, ge=1, le=500),
+    entity_type: str | None = Query(default=None, pattern="^(event|alert)$"),
+) -> dict:
+    rows = list_audit_log(limit, entity_type)
+    return {"items": [row_to_audit(row) for row in rows], "total": len(rows)}

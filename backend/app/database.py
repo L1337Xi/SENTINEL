@@ -48,6 +48,17 @@ CREATE TABLE IF NOT EXISTS alerts (
     UNIQUE(event_id, rule_id)
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_status_created ON alerts(status, created_at DESC);
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    details TEXT NOT NULL DEFAULT '{}',
+    occurred_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_log_occurred ON audit_log(occurred_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id, id DESC);
 """
 
 
@@ -106,17 +117,53 @@ def row_to_scan(row: sqlite3.Row) -> dict:
     item["result"] = json.loads(item["result"]) if item["result"] else None
     return item
 
+def append_audit(
+    connection: sqlite3.Connection, entity_type: str, entity_id: str,
+    action: str, occurred_at: str, details: dict | None = None,
+    actor: str = "local",
+) -> None:
+    connection.execute(
+        """INSERT INTO audit_log (entity_type, entity_id, action, actor, details, occurred_at)
+        VALUES (?, ?, ?, ?, ?, ?)""",
+        (entity_type, entity_id, action, actor,
+         json.dumps(details or {}, separators=(",", ":"), ensure_ascii=False), occurred_at),
+    )
+
+
+def list_audit_log(limit: int, entity_type: str | None = None) -> list[sqlite3.Row]:
+    with session() as connection:
+        if entity_type:
+            return connection.execute(
+                "SELECT * FROM audit_log WHERE entity_type = ? ORDER BY id DESC LIMIT ?",
+                (entity_type, limit),
+            ).fetchall()
+        return connection.execute(
+            "SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+
+
+def row_to_audit(row: sqlite3.Row) -> dict:
+    item = dict(row)
+    item["details"] = json.loads(item["details"])
+    return item
+
+
 def create_alert(
     alert_id: str, event_id: str, rule_id: str, title: str, severity: str,
     description: str, created_at: str,
 ) -> None:
     with session() as connection:
-        connection.execute(
+        cursor = connection.execute(
             """INSERT OR IGNORE INTO alerts
             (id, event_id, rule_id, title, severity, status, description, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?)""",
             (alert_id, event_id, rule_id, title, severity, description, created_at, created_at),
         )
+        if cursor.rowcount:
+            append_audit(
+                connection, "alert", alert_id, "alert.created", created_at,
+                {"event_id": event_id, "rule_id": rule_id, "status": "open"},
+            )
 
 
 def list_alerts(status: str | None, limit: int) -> list[sqlite3.Row]:
@@ -133,10 +180,19 @@ def list_alerts(status: str | None, limit: int) -> list[sqlite3.Row]:
 
 def update_alert(alert_id: str, status: str, updated_at: str) -> sqlite3.Row | None:
     with session() as connection:
-        connection.execute(
-            "UPDATE alerts SET status = ?, updated_at = ? WHERE id = ?",
-            (status, updated_at, alert_id),
-        )
+        current = connection.execute("SELECT * FROM alerts WHERE id = ?", (alert_id,)).fetchone()
+        if current is None:
+            return None
+        previous_status = current["status"]
+        if previous_status != status:
+            connection.execute(
+                "UPDATE alerts SET status = ?, updated_at = ? WHERE id = ?",
+                (status, updated_at, alert_id),
+            )
+            append_audit(
+                connection, "alert", alert_id, "alert.status_changed", updated_at,
+                {"from": previous_status, "to": status},
+            )
         return connection.execute("SELECT * FROM alerts WHERE id = ?", (alert_id,)).fetchone()
 
 

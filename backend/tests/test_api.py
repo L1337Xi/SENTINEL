@@ -129,3 +129,64 @@ def test_detection_ignores_auth_events_below_threshold(tmp_path, monkeypatch):
         )
         assert response.status_code == 201
         assert client.get("/api/alerts").json()["total"] == 0
+
+
+def test_audit_log_records_event_alert_creation_and_status_transitions(tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "DATABASE_PATH", tmp_path / "audit.db")
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/events",
+            json={
+                "source": "auth-agent",
+                "event_type": "authentication_failure",
+                "message": "Repeated login failures",
+                "metadata": {"attempts": 9},
+            },
+        )
+        assert created.status_code == 201
+        alert = client.get("/api/alerts").json()["items"][0]
+
+        acknowledged = client.patch(
+            "/api/alerts/" + alert["id"], json={"status": "acknowledged"}
+        )
+        assert acknowledged.status_code == 200
+        resolved = client.patch(
+            "/api/alerts/" + alert["id"], json={"status": "resolved"}
+        )
+        assert resolved.status_code == 200
+
+        audit = client.get("/api/audit-log").json()["items"]
+        actions = [item["action"] for item in audit]
+        assert actions.count("event.ingested") == 1
+        assert actions.count("alert.created") == 1
+        assert actions.count("alert.status_changed") == 2
+        transitions = [item["details"] for item in audit if item["action"] == "alert.status_changed"]
+        assert transitions == [
+            {"from": "acknowledged", "to": "resolved"},
+            {"from": "open", "to": "acknowledged"},
+        ]
+
+        filtered = client.get("/api/audit-log", params={"entity_type": "alert"})
+        assert filtered.status_code == 200
+        assert all(item["entity_type"] == "alert" for item in filtered.json()["items"])
+
+
+def test_audit_log_does_not_duplicate_noop_status_changes(tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "DATABASE_PATH", tmp_path / "audit-noop.db")
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/events",
+            json={
+                "source": "auth-agent",
+                "event_type": "authentication_failure",
+                "message": "Repeated login failures",
+                "metadata": {"attempts": 6},
+            },
+        )
+        alert = client.get("/api/alerts").json()["items"][0]
+        client.patch("/api/alerts/" + alert["id"], json={"status": "acknowledged"})
+        before = client.get("/api/audit-log").json()["total"]
+        client.patch("/api/alerts/" + alert["id"], json={"status": "acknowledged"})
+        after = client.get("/api/audit-log").json()["total"]
+        assert created.status_code == 201
+        assert before == after
