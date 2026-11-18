@@ -44,6 +44,7 @@ from .detections import RULES, evaluate_event
 from .editions import edition_manifest
 from .evidence import router as evidence_router
 from .host_assessment import run_host_assessment
+from .file_response import (investigate_file, quarantine_file, permanently_delete_file, list_quarantine, restore_quarantined)
 from .scanner import network_discovery, system_inventory, validate_local_network
 from .schemas import (
     AlertUpdate,
@@ -192,6 +193,80 @@ def list_scans(limit: int = Query(default=20, ge=1, le=100)) -> dict:
             "SELECT * FROM scans ORDER BY started_at DESC LIMIT ?", (limit,)
         ).fetchall()
     return {"items": [row_to_scan(row) for row in rows]}
+
+
+def _get_scan_finding(scan_id: str, finding_id: str) -> dict:
+    with session() as connection:
+        row = connection.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
+    if row is None or row["scan_type"] != "system" or row["status"] != "completed":
+        raise HTTPException(status_code=404, detail="Completed host assessment not found.")
+    scan = row_to_scan(row)
+    result = scan.get("result") or {}
+    assessment = result.get("security_assessment") or {}
+    for finding in assessment.get("findings", []):
+        if str(finding.get("id")) == finding_id and finding.get("category") == "malware":
+            if not finding.get("path") or not finding.get("sha256"):
+                raise HTTPException(status_code=422, detail="Finding has no verified file path and SHA-256.")
+            return finding
+    raise HTTPException(status_code=404, detail="Malware finding not found in this scan.")
+
+
+@app.post("/api/scans/{scan_id}/findings/{finding_id}/investigate", tags=["host response"])
+def investigate_host_finding(scan_id: str, finding_id: str) -> dict:
+    finding = _get_scan_finding(scan_id, finding_id)
+    try:
+        report = investigate_file(str(finding["path"]), str(finding["sha256"]))
+    except (OSError, ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    now = datetime.now(UTC).isoformat()
+    with session() as connection:
+        append_audit(connection, "scan", scan_id, "finding.investigated", now,
+                     {"finding_id": finding_id, "sha256": report["sha256"],
+                      "verdict": report["assessment"]["verdict"]})
+    return report
+
+
+@app.post("/api/scans/{scan_id}/findings/{finding_id}/response", tags=["host response"])
+def respond_to_host_finding(scan_id: str, finding_id: str, payload: dict) -> dict:
+    finding = _get_scan_finding(scan_id, finding_id)
+    action = str(payload.get("action", ""))
+    try:
+        if action == "quarantine":
+            result = quarantine_file(str(finding["path"]), str(finding["sha256"]))
+        elif action == "delete":
+            result = permanently_delete_file(str(finding["path"]), str(finding["sha256"]),
+                                             str(payload.get("confirmation", "")))
+        else:
+            raise HTTPException(status_code=422, detail="Action must be quarantine or delete.")
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    now = datetime.now(UTC).isoformat()
+    with session() as connection:
+        append_audit(connection, "scan", scan_id, f"finding.{action}", now,
+                     {"finding_id": finding_id, "sha256": finding["sha256"], "path": finding["path"]})
+    return result
+
+
+@app.get("/api/quarantine", tags=["host response"])
+def get_quarantine() -> dict:
+    return {"items": list_quarantine()}
+
+
+@app.post("/api/quarantine/{item_id}/restore", tags=["host response"])
+def restore_quarantine_item(item_id: str) -> dict:
+    try:
+        result = restore_quarantined(item_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Quarantine item not found.") from exc
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    now = datetime.now(UTC).isoformat()
+    with session() as connection:
+        append_audit(connection, "scan", item_id, "quarantine.restored", now,
+                     {"path": result["path"], "sha256": result["sha256"]})
+    return result
 
 
 @app.get("/api/scans/{scan_id}", tags=["scans"])
