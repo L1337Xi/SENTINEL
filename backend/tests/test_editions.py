@@ -1,4 +1,6 @@
 from app import editions
+from app.main import app
+from fastapi.testclient import TestClient
 
 
 def test_defaults_to_normal_when_unset(monkeypatch):
@@ -32,9 +34,6 @@ def test_normal_does_not_include_advanced_features(monkeypatch):
 
 
 def test_edition_api_reports_default_normal_mode(monkeypatch):
-    from fastapi.testclient import TestClient
-    from app.main import app
-
     monkeypatch.delenv("SENTINEL_EDITION", raising=False)
     with TestClient(app) as client:
         response = client.get("/api/edition")
