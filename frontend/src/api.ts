@@ -41,7 +41,7 @@ export const api = {
   },
   createEvent: (event: { source: string; event_type: string; severity: Severity; message: string; host?: string; metadata?: Record<string, unknown> }) =>
     request<SecurityEvent>("/api/events", { method: "POST", body: JSON.stringify({ ...event, occurred_at: new Date().toISOString() }) }),
-  scans: () => request<{ items: ScanRecord[] }>("/api/scans"),
+  scans: () => request<{ items: ScanRecord[] }>("/api/scans?limit=100"),
   scan: (id: string) => request<ScanRecord>(`/api/scans/${encodeURIComponent(id)}`),
   deleteScan: (id: string) => request<{ id: string; deleted: boolean }>(`/api/scans/${encodeURIComponent(id)}`, { method: "DELETE" }),
   clearHostScanHistory: () => request<{ deleted: number; message: string }>("/api/scans/system", { method: "DELETE" }),
