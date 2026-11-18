@@ -155,7 +155,7 @@ export default function App() {
   async function clearHostScanHistory() {
     const completedCount = scans.filter((item) => item.scan_type === "system" && ["completed", "failed"].includes(item.status)).length;
     if (!completedCount) return;
-    if (!window.confirm(`Delete all ${completedCount} completed/failed host assessment results? Active scans, network scans, alerts, and cases will be kept. This cannot be undone.`)) return;
+    if (!window.confirm("Delete all completed/failed host assessment results? Active scans, network scans, alerts, and cases will be kept. This cannot be undone.")) return;
     setError("");
     try {
       await api.clearHostScanHistory();
