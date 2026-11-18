@@ -17,6 +17,8 @@ from .database import (
     create_alert,
     create_case,
     create_scan,
+    delete_completed_system_scans,
+    delete_system_scan,
     initialize_database,
     link_event_to_case,
     list_alerts,
@@ -67,7 +69,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PATCH"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
 )
 
@@ -199,6 +201,27 @@ def get_scan(scan_id: str) -> dict:
     if row is None:
         raise HTTPException(status_code=404, detail="Scan not found.")
     return row_to_scan(row)
+
+
+@app.delete("/api/scans/system", tags=["scans"])
+def clear_host_scan_history() -> dict:
+    deleted = delete_completed_system_scans(datetime.now(UTC).isoformat())
+    return {"deleted": deleted, "message": f"Deleted {deleted} completed host scan record(s)."}
+
+
+@app.delete("/api/scans/{scan_id}", tags=["scans"])
+def delete_host_scan(scan_id: str) -> dict:
+    try:
+        normalized_id = str(UUID(scan_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Host scan not found.") from exc
+    deleted = delete_system_scan(normalized_id, datetime.now(UTC).isoformat())
+    if deleted is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Only completed or failed host assessment records can be deleted. Network and active scans are protected.",
+        )
+    return {"id": normalized_id, "deleted": True}
 
 
 @app.post("/api/scans/system", status_code=202, tags=["scans"])
