@@ -360,6 +360,8 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
   const malwareFindings = findings.filter((finding) => finding.category === "malware");
   const malwareEngines = asObject(assessment.malware_engines);
   const clamav = asObject(malwareEngines.clamav);
+  const threatIntel = asObject(assessment.threat_intelligence);
+  const malwareBazaar = asObject(threatIntel.malwarebazaar);
   const persistence = asArray<Record<string, unknown>>(assessment.persistence_inventory);
   const privilegedAccounts = asObject(assessment.privileged_accounts);
   const uidZeroAccounts = asArray<Record<string, unknown>>(privilegedAccounts.uid_zero_accounts);
@@ -377,7 +379,7 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
     <PageHeading eyebrow="ASSESSMENT / LOCAL HOST" title="Host assessment" description="Read-only inventory of the machine running the SENTINEL backend.">
       <ActionButton onClick={onStart} disabled={busy}>↻ Run assessment</ActionButton>
     </PageHeading>
-    <div className="scope-note host-scope"><span className="scope-mark">i</span><p>This performs a bounded, read-only local assessment: host inventory, SHA-256 file hashing against operator-supplied local indicators, static script-pattern review and selected security-configuration checks. Suspicious files are never executed, changed, quarantined or uploaded. File-count, size and time limits apply; a clean result does not prove the system is malware-free.</p></div>
+    <div className="scope-note host-scope"><span className="scope-mark">i</span><p>This performs a bounded, read-only local assessment: host inventory, SHA-256 file hashing against local indicators and an optional live MalwareBazaar feed, static script-pattern review and selected security-configuration checks. Suspicious files are never executed, changed, quarantined or uploaded. File-count, size and time limits apply; a clean result does not prove the system is malware-free.</p></div>
     <section className="panel full-panel scan-panel"><div className="panel-title"><div><div className="eyebrow">ASSESSMENT STATUS</div><h2>Latest host inventory</h2></div><span className="section-note">{scans.filter((item) => item.scan_type === "system").length} TOTAL RUNS</span></div><ScanHeader scan={scan} />
       {isAssessing && <section className="live-assessment" aria-live="polite">
         <div className="result-heading"><h3>Live assessment activity</h3><span className="scan-state running">{progressPhase.toUpperCase()}</span></div>
@@ -387,7 +389,7 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
           <Resource label="SCRIPT INDICATORS" value={String(liveProgress.script_indicators ?? 0)} detail="Static indicators; not confirmed malware" />
           <Resource label="ELAPSED" value={`${Number(liveProgress.elapsed_seconds ?? 0).toFixed(1)} s`} detail={`Filesystem budget remaining: ${Number(liveProgress.time_budget_remaining ?? 180).toFixed(1)} s`} />
         </div>
-        <div className="live-current"><span className="meta-label">CURRENT FILE / LOCATION</span><code>{String(liveProgress.current_path ?? (progressPhase === "clamav" ? "ClamAV is scanning the configured filesystem scope…" : "Preparing assessment…"))}</code></div>
+        <div className="live-current"><span className="meta-label">CURRENT FILE / LOCATION</span><code>{String(liveProgress.current_path ?? (progressPhase === "clamav" ? "ClamAV is scanning the configured filesystem scope…" : progressPhase === "threat intelligence" ? "Checking the latest MalwareBazaar hash feed…" : "Preparing assessment…"))}</code></div>
         <p className="live-note">Updates are polled from the local scanner. The filesystem time remaining is a scan budget, not a guaranteed completion ETA. ClamAV does not expose per-file progress in this scan mode.</p>
       </section>}
       {scan?.status === "failed" && <div className="scan-error">{scan.error ?? "The assessment failed."}</div>}
@@ -420,10 +422,11 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
           <div className="result-heading"><h3>Security assessment report</h3><button className="button button-secondary" onClick={() => downloadJson(`sentinel-host-report-${scan?.id ?? "latest"}.json`, { scan, security_assessment: assessment })}>Export JSON report ↓</button></div>
           <div className="resource-grid">
             <Resource label="FILES HASHED" value={String(assessmentSummary.files_hashed ?? 0)} detail={`${String(assessmentSummary.files_seen ?? 0)} files visited`} />
-            <Resource label="MALWARE MATCHES" value={String(assessmentSummary.malware_matches ?? 0)} detail="Exact local SHA-256 indicators" />
+            <Resource label="MALWARE MATCHES" value={String(assessmentSummary.malware_matches ?? 0)} detail="Exact local and live-feed hash matches" />
             <Resource label="CONFIG FINDINGS" value={String(assessmentSummary.configuration_findings ?? 0)} detail="Review required; not all are vulnerabilities" />
             <Resource label="SCAN STATUS" value={assessmentSummary.truncated ? "LIMIT REACHED" : "COMPLETED"} detail={assessmentSummary.truncated ? "File or time budget reached" : "Configured scan scope completed"} />
             <Resource label="CLAMAV ENGINE" value={clamav.executed ? "EXECUTED" : clamav.available ? "AVAILABLE" : "NOT INSTALLED"} detail={String(clamav.version ?? clamav.note ?? "No local engine detected")} />
+            <Resource label="MALWAREBAZAAR" value={malwareBazaar.status === "ok" ? "LIVE FEED" : malwareBazaar.status === "unavailable" ? "UNAVAILABLE" : "NOT CONFIGURED"} detail={malwareBazaar.status === "ok" ? `${String(malwareBazaar.records_received ?? 0)} recent hashes checked` : String(malwareBazaar.note ?? "Optional live hash intelligence")} />
           </div>
           <AssessmentFindingCharts findings={findings} capabilities={capabilities} />
           <div className="result-section">
