@@ -42,7 +42,22 @@ function downloadJson(filename: string, value: unknown) {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>("home");
+  const [view, setView] = useState<View>(() => {
+    const route = window.location.hash.slice(1);
+    return navItems.some((item) => item.id === route) ? route as View : "home";
+  });
+  const navigate = useCallback((next: View) => {
+    setView(next);
+    if (window.location.hash !== `#${next}`) window.location.hash = next;
+  }, []);
+  useEffect(() => {
+    const syncRoute = () => {
+      const route = window.location.hash.slice(1);
+      navigate(navItems.some((item) => item.id === route) ? route as View : "home");
+    };
+    window.addEventListener("hashchange", syncRoute);
+    return () => window.removeEventListener("hashchange", syncRoute);
+  }, []);
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [alerts, setAlerts] = useState<AlertRecord[]>([]);
   const [total, setTotal] = useState(0);
@@ -113,7 +128,7 @@ export default function App() {
       const started = kind === "system" ? await api.startSystemScan() : await api.startNetworkScan(selectedNetwork);
       const scan = await api.scan(started.id);
       setActiveScan(scan);
-      setView(kind === "system" ? "host" : "network");
+      navigate(kind === "system" ? "host" : "network");
       const history = await api.scans(); setScans(history.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "The scan could not be started.");
@@ -143,19 +158,19 @@ export default function App() {
     finally { setBusy(false); }
   }
 
-  if (view === "home") return <Landing health={health} onEnter={() => setView("overview")} onOpen={setView} />;
+  if (view === "home") return <Landing health={health} onEnter={() => navigate("overview")} onOpen={navigate} />;
 
   const currentTitle = navItems.find((item) => item.id === view)?.label ?? "Overview";
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <button className="wordmark" onClick={() => setView("overview")} aria-label="SENTINEL home">
+        <button className="wordmark" onClick={() => navigate("overview")} aria-label="SENTINEL home">
           <span><strong>SENTINEL</strong><small>SECURITY OPERATIONS</small></span>
         </button>
         <div className="side-caption">CONSOLE</div>
         <nav className="side-nav" aria-label="Primary navigation">
-          {navItems.map((item) => <button key={item.id} className={`nav-item ${view === item.id ? "selected" : ""}`} onClick={() => setView(item.id)}>
+          {navItems.map((item) => <button key={item.id} className={`nav-item ${view === item.id ? "selected" : ""}`} onClick={() => navigate(item.id)}>
             <span className="nav-code">{item.code}</span><span>{item.label}</span>{view === item.id && <span className="nav-indicator" />}
           </button>)}
         </nav>
@@ -173,7 +188,7 @@ export default function App() {
 
         {error && <div className="error-banner"><span className="error-mark">!</span><div><strong>Operation notice</strong><small>{error}</small></div><button onClick={() => void refresh()}>RETRY</button><button className="dismiss" onClick={() => setError("")} aria-label="Dismiss notice">×</button></div>}
 
-        {view === "overview" && <Overview events={events} total={total} counts={counts} scans={scans} busy={busy} health={health} onNavigate={setView} onStart={startScan} onAddSample={addSample} />}
+        {view === "overview" && <Overview events={events} total={total} counts={counts} scans={scans} busy={busy} health={health} onNavigate={navigate} onStart={startScan} onAddSample={addSample} />}
         {view === "events" && <EventsView events={events} total={total} search={search} severity={severity} setSearch={setSearch} setSeverity={setSeverity} onRefresh={() => void refresh()} />}
         {view === "alerts" && <AlertsView alerts={alerts} onChangeStatus={changeAlertStatus} onRefresh={() => void refresh()} />}
         {view === "host" && <HostView scan={activeScan?.scan_type === "system" ? activeScan : scans.find((scan) => scan.scan_type === "system") ?? null} scans={scans} busy={busy} onStart={() => void startScan("system")} />}
