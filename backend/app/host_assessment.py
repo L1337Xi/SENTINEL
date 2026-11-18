@@ -147,7 +147,6 @@ def _clamav_scan(root: Path, timeout: int = 90,
                             progress_callback({"current_path": current_path,
                                                "clamav_files_scanned": files_scanned})
                     elif line.startswith(("Scanning:", "Scanning ")):
-
                         current_path = line.partition(":")[2].strip() if line.startswith("Scanning:") else line.removeprefix("Scanning ").strip()
                         if progress_callback:
                             progress_callback({"current_path": current_path,
