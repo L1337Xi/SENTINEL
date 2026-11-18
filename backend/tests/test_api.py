@@ -260,6 +260,9 @@ def test_host_scan_history_delete_is_scoped_and_protects_active_and_network_scan
         assert client.get(f"/api/scans/{active_id}").status_code == 200
         audit = database.list_audit_log(10, "scan")
         assert any(row["action"] == "scan.deleted" and row["entity_id"] == host_id for row in audit)
+        filtered_audit = client.get("/api/audit-log", params={"entity_type": "scan"})
+        assert filtered_audit.status_code == 200
+        assert filtered_audit.json()["total"] >= 1
 
 
 def test_clear_host_scan_history_preserves_network_and_active_scans(tmp_path, monkeypatch):
