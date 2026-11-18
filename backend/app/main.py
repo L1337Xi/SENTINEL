@@ -195,6 +195,23 @@ def list_scans(limit: int = Query(default=20, ge=1, le=100)) -> dict:
     return {"items": [row_to_scan(row) for row in rows]}
 
 
+def _store_finding_metadata(scan_id: str, finding_id: str, key: str, value: dict) -> None:
+    with session() as connection:
+        row = connection.execute("SELECT result FROM scans WHERE id = ?", (scan_id,)).fetchone()
+        if row is None or not row["result"]:
+            raise HTTPException(status_code=404, detail="Host assessment result not found.")
+        result = json.loads(row["result"])
+        findings = result.get("security_assessment", {}).get("findings", [])
+        target = next((item for item in findings if str(item.get("id")) == finding_id), None)
+        if target is None:
+            raise HTTPException(status_code=404, detail="Finding not found.")
+        target[key] = value
+        connection.execute(
+            "UPDATE scans SET result = ? WHERE id = ?",
+            (json.dumps(result, separators=(",", ":"), ensure_ascii=False), scan_id),
+        )
+
+
 def _get_scan_finding(scan_id: str, finding_id: str) -> dict:
     with session() as connection:
         row = connection.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
@@ -219,6 +236,7 @@ def investigate_host_finding(scan_id: str, finding_id: str) -> dict:
     except (OSError, ValueError, PermissionError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     now = datetime.now(UTC).isoformat()
+    _store_finding_metadata(scan_id, finding_id, "investigation", report)
     with session() as connection:
         append_audit(connection, "scan", scan_id, "finding.investigated", now,
                      {"finding_id": finding_id, "sha256": report["sha256"],
@@ -249,6 +267,8 @@ def respond_to_host_finding(scan_id: str, finding_id: str, payload: dict) -> dic
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     now = datetime.now(UTC).isoformat()
+    _store_finding_metadata(scan_id, finding_id, "response_action",
+                            {"action": action, "result": result, "occurred_at": now})
     with session() as connection:
         append_audit(connection, "scan", scan_id, f"finding.{action}", now,
                      {"finding_id": finding_id, "sha256": finding["sha256"], "path": finding["path"]})
