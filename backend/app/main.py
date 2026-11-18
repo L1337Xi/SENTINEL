@@ -256,7 +256,8 @@ def respond_to_host_finding(scan_id: str, finding_id: str, payload: dict) -> dic
                 detail="Package-integrity evidence supports a likely false positive. SENTINEL will not quarantine or delete this file.",
             )
         if action == "quarantine":
-            result = quarantine_file(str(finding["path"]), str(finding["sha256"]))
+            result = quarantine_file(str(finding["path"]), str(finding["sha256"]),
+                                     scan_id=scan_id, finding_id=finding_id)
         elif action == "delete":
             result = permanently_delete_file(str(finding["path"]), str(finding["sha256"]),
                                              str(payload.get("confirmation", "")))
@@ -289,6 +290,11 @@ def restore_quarantine_item(item_id: str) -> dict:
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     now = datetime.now(UTC).isoformat()
+    if result.get("scan_id") and result.get("finding_id"):
+        _store_finding_metadata(
+            str(result["scan_id"]), str(result["finding_id"]), "response_action",
+            {"action": "restored", "result": result, "occurred_at": now},
+        )
     with session() as connection:
         append_audit(connection, "scan", item_id, "quarantine.restored", now,
                      {"path": result["path"], "sha256": result["sha256"]})
