@@ -13,6 +13,7 @@ import os
 import pwd
 import re
 import shutil
+import selectors
 import stat
 import subprocess
 import time
@@ -101,7 +102,6 @@ def _clamav_scan(root: Path, timeout: int = 90,
         )
         if process.stdout is None:
             raise OSError("ClamAV output stream was not available")
-        import selectors
         selector = selectors.DefaultSelector()
         selector.register(process.stdout, selectors.EVENT_READ)
         pending = b""
@@ -138,13 +138,13 @@ def _clamav_scan(root: Path, timeout: int = 90,
                             "source": "clamav", "engine": "ClamAV",
                         })
                     elif line.endswith(": OK"):
-                        current_path = line[:-4]
+                        current_path = line.rsplit(": ", 1)[0]
                         files_scanned += 1
                         if progress_callback:
                             progress_callback({"current_path": current_path,
                                                "clamav_files_scanned": files_scanned})
-                    elif line.startswith("Scanning:"):
-                        current_path = line.partition(":")[2].strip()
+                    elif line.startswith("Scanning:") or line.startswith("Scanning "):
+                        current_path = line.partition(":")[2].strip() if line.startswith("Scanning:") else line.removeprefix("Scanning ").strip()
                         if progress_callback:
                             progress_callback({"current_path": current_path,
                                                "clamav_files_scanned": files_scanned})
