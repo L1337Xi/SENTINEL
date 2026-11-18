@@ -9,7 +9,9 @@ export interface AlertRecord {
   id: string; event_id: string; rule_id: string; title: string; severity: Severity;
   status: "open" | "acknowledged" | "resolved"; description: string; created_at: string; updated_at: string;
 }
-export interface EditionFeature { id: string; name: string; tier: "normal" | "advanced"; status: "available" | "planned"; description: string; included: boolean; }\nexport interface EditionManifest { edition: "normal" | "advanced"; display_name: string; features: EditionFeature[]; license_enforcement: string; notice: string; }\nexport interface ScanRecord {
+export interface EditionFeature { id: string; name: string; tier: "normal" | "advanced"; status: "available" | "planned"; description: string; included: boolean; }
+export interface EditionManifest { edition: "normal" | "advanced"; display_name: string; features: EditionFeature[]; license_enforcement: string; notice: string; }
+export interface ScanRecord {
   id: string; scan_type: "system" | "network"; status: "queued" | "running" | "completed" | "failed";
   target: string; started_at: string; completed_at: string | null; result: Record<string, unknown> | null; error: string | null;
   progress: Record<string, unknown> | null;
@@ -29,7 +31,8 @@ export const api = {
   alerts: () => request<{ items: AlertRecord[]; total: number }>("/api/alerts?limit=50"),
   updateAlert: (id: string, status: "acknowledged" | "resolved") =>
     request<AlertRecord>(`/api/alerts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ status }) }),
-  health: () => request<{ status: string; service: string; version: string }>("/api/health"),\n  edition: () => request<EditionManifest>("/api/edition"),
+  health: () => request<{ status: string; service: string; version: string }>("/api/health"),
+  edition: () => request<EditionManifest>("/api/edition"),
   events: (filters: { search?: string; severity?: string } = {}) => {
     const params = new URLSearchParams({ limit: "100" });
     if (filters.search) params.set("search", filters.search);
