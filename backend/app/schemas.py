@@ -118,3 +118,28 @@ class CaseNoteCreate(BaseModel):
         if not value:
             raise ValueError("Note content cannot be blank.")
         return value
+
+
+EvidenceStatus = Literal["acquired", "verified", "tampered", "missing", "released"]
+CustodyAction = Literal["handled", "transferred", "note", "released"]
+
+
+class EvidenceCustodyCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: CustodyAction
+    note: str = Field(min_length=1, max_length=2000)
+    actor: str = Field(default="local", min_length=1, max_length=120)
+
+    @field_validator("note", "actor")
+    @classmethod
+    def strip_required_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("This field cannot be blank.")
+        return value
+
+
+class EvidenceCaseLink(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    case_id: UUID

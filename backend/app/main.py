@@ -24,11 +24,13 @@ from .database import (
     list_case_events,
     list_case_timeline,
     list_cases,
+    list_evidence,
     row_to_alert,
     row_to_audit,
     row_to_case,
     row_to_case_timeline,
     row_to_event,
+    row_to_evidence,
     row_to_scan,
     session,
     update_alert,
@@ -37,6 +39,7 @@ from .database import (
 )
 from .database import get_case as fetch_case
 from .detections import RULES, evaluate_event
+from .evidence import router as evidence_router
 from .scanner import network_discovery, system_inventory, validate_local_network
 from .schemas import (
     AlertUpdate,
@@ -51,8 +54,11 @@ from .schemas import (
 
 app = FastAPI(
     title="L1337XI SENTINEL API",
-    version="0.2.0",
-    description="Local-first security event intake, host inventory, and scoped network discovery.",
+    version="0.3.0",
+    description=(
+        "Local-first security event intake, host inventory, scoped network discovery, "
+        "incident cases, and evidence custody."
+    ),
 )
 
 app.add_middleware(
@@ -67,6 +73,9 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup() -> None:
     initialize_database()
+
+
+app.include_router(evidence_router)
 
 
 @app.get("/api/health", tags=["system"])
@@ -257,6 +266,18 @@ def get_case_detail(case_id: str) -> dict:
     return {**row_to_case(row),"events":[{**row_to_event(e),"linked_at":e["linked_at"]} for e in events]}
 
 
+@app.get("/api/cases/{case_id}/evidence", tags=["cases"])
+def get_case_evidence(case_id: str, limit: int = Query(default=50, ge=1, le=200)) -> dict:
+    try:
+        normalized = str(UUID(case_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Case not found.") from exc
+    if fetch_case(normalized) is None:
+        raise HTTPException(status_code=404, detail="Case not found.")
+    rows, total = list_evidence(normalized, None, None, limit, 0)
+    return {"items": [row_to_evidence(row) for row in rows], "total": total}
+
+
 @app.patch("/api/cases/{case_id}", tags=["cases"])
 def patch_case(case_id: str, payload: CaseUpdate) -> dict:
     try:
@@ -309,7 +330,9 @@ def get_case_history(case_id: str, limit: int=Query(default=200,ge=1,le=500)) ->
 @app.get("/api/audit-log", tags=["audit"])
 def get_audit_log(
     limit: int = Query(default=100, ge=1, le=500),
-    entity_type: str | None = Query(default=None, pattern="^(event|alert|case)$"),
+    entity_type: str | None = Query(
+        default=None, pattern="^(event|alert|case|evidence)$"
+    ),
 ) -> dict:
     rows = list_audit_log(limit, entity_type)
     return {"items": [row_to_audit(row) for row in rows], "total": len(rows)}

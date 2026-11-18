@@ -78,6 +78,35 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_log_occurred ON audit_log(occurred_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id, id DESC);
+CREATE TABLE IF NOT EXISTS evidence (
+    id TEXT PRIMARY KEY,
+    case_id TEXT REFERENCES cases(id) ON DELETE SET NULL,
+    original_name TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    content_type TEXT,
+    source TEXT NOT NULL DEFAULT 'local-upload',
+    storage_path TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('acquired','verified','tampered','missing','released')),
+    acquired_at TEXT NOT NULL,
+    acquired_by TEXT NOT NULL DEFAULT 'local',
+    last_verified_at TEXT,
+    verify_count INTEGER NOT NULL DEFAULT 0,
+    note TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_evidence_sha ON evidence(sha256);
+CREATE INDEX IF NOT EXISTS idx_evidence_case ON evidence(case_id, acquired_at DESC);
+CREATE INDEX IF NOT EXISTS idx_evidence_acquired ON evidence(acquired_at DESC);
+CREATE TABLE IF NOT EXISTS evidence_custody (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE RESTRICT,
+    action TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    sha256 TEXT NOT NULL,
+    occurred_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_evidence_custody_evidence ON evidence_custody(evidence_id, id DESC);
 """
 
 
@@ -340,3 +369,204 @@ def row_to_case_timeline(row: sqlite3.Row) -> dict:
     item = dict(row)
     item["details"] = json.loads(item["details"])
     return item
+
+
+def _insert_custody(
+    connection: sqlite3.Connection, evidence_id: str, action: str, actor: str,
+    note: str, sha256: str, occurred_at: str,
+) -> None:
+    connection.execute(
+        """INSERT INTO evidence_custody (evidence_id, action, actor, note, sha256, occurred_at)
+        VALUES (?, ?, ?, ?, ?, ?)""",
+        (evidence_id, action, actor, note, sha256, occurred_at),
+    )
+
+
+def create_evidence(
+    evidence_id: str, original_name: str, size_bytes: int, sha256: str,
+    content_type: str | None, source: str, storage_path: str, acquired_at: str,
+    case_id: str | None = None, note: str = "", actor: str = "local",
+) -> sqlite3.Row:
+    with session() as connection:
+        connection.execute(
+            """INSERT INTO evidence
+            (id, case_id, original_name, size_bytes, sha256, content_type, source,
+             storage_path, status, acquired_at, acquired_by, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'acquired', ?, ?, ?)""",
+            (evidence_id, case_id, original_name, size_bytes, sha256, content_type,
+             source, storage_path, acquired_at, actor, note),
+        )
+        _insert_custody(
+            connection, evidence_id, "acquired", actor,
+            f"Acquired {original_name} ({size_bytes} bytes) from {source}.",
+            sha256, acquired_at,
+        )
+        append_audit(
+            connection, "evidence", evidence_id, "evidence.acquired", acquired_at,
+            {"sha256": sha256, "size_bytes": size_bytes, "source": source, "case_id": case_id},
+            actor=actor,
+        )
+        if case_id:
+            details = {"evidence_id": evidence_id, "sha256": sha256, "name": original_name}
+            connection.execute(
+                """INSERT INTO case_timeline (case_id, entry_type, actor, details, occurred_at)
+                VALUES (?,'evidence.linked',?,?,?)""",
+                (case_id, actor, json.dumps(details, separators=(",", ":")), acquired_at),
+            )
+            connection.execute("UPDATE cases SET updated_at=? WHERE id=?", (acquired_at, case_id))
+        return connection.execute("SELECT * FROM evidence WHERE id=?", (evidence_id,)).fetchone()
+
+
+def find_evidence_by_sha(sha256: str) -> sqlite3.Row | None:
+    with session() as connection:
+        return connection.execute(
+            "SELECT * FROM evidence WHERE sha256=? ORDER BY acquired_at ASC LIMIT 1", (sha256,)
+        ).fetchone()
+
+
+def get_evidence(evidence_id: str) -> sqlite3.Row | None:
+    with session() as connection:
+        return connection.execute("SELECT * FROM evidence WHERE id=?", (evidence_id,)).fetchone()
+
+
+def list_evidence(
+    case_id: str | None, sha256: str | None, status: str | None, limit: int, offset: int,
+) -> tuple[list[sqlite3.Row], int]:
+    clauses: list[str] = []
+    params: list[object] = []
+    if case_id:
+        clauses.append("case_id=?")
+        params.append(case_id)
+    if sha256:
+        clauses.append("sha256=?")
+        params.append(sha256)
+    if status:
+        clauses.append("status=?")
+        params.append(status)
+    where = " WHERE " + " AND ".join(clauses) if clauses else ""
+    with session() as connection:
+        total = connection.execute(f"SELECT COUNT(*) FROM evidence{where}", params).fetchone()[0]
+        rows = connection.execute(
+            f"SELECT * FROM evidence{where} ORDER BY acquired_at DESC, id DESC LIMIT ? OFFSET ?",
+            [*params, limit, offset],
+        ).fetchall()
+    return rows, total
+
+
+def list_evidence_custody(evidence_id: str, limit: int = 200) -> list[sqlite3.Row]:
+    with session() as connection:
+        return connection.execute(
+            "SELECT * FROM evidence_custody WHERE evidence_id=? ORDER BY id DESC LIMIT ?",
+            (evidence_id, limit),
+        ).fetchall()
+
+
+def add_custody_entry(
+    evidence_id: str, action: str, actor: str, note: str, occurred_at: str,
+) -> sqlite3.Row | None:
+    with session() as connection:
+        row = connection.execute("SELECT * FROM evidence WHERE id=?", (evidence_id,)).fetchone()
+        if row is None:
+            return None
+        if action == "released":
+            connection.execute(
+                "UPDATE evidence SET status='released' WHERE id=?", (evidence_id,)
+            )
+        _insert_custody(connection, evidence_id, action, actor, note, row["sha256"], occurred_at)
+        append_audit(
+            connection, "evidence", evidence_id, f"evidence.custody_{action}", occurred_at,
+            {"note": note[:200]}, actor=actor,
+        )
+        return connection.execute("SELECT * FROM evidence WHERE id=?", (evidence_id,)).fetchone()
+
+
+def record_evidence_verification(
+    evidence_id: str, observed_sha256: str, verified: bool, occurred_at: str,
+) -> sqlite3.Row | None:
+    status = "verified" if verified else "tampered"
+    with session() as connection:
+        row = connection.execute("SELECT * FROM evidence WHERE id=?", (evidence_id,)).fetchone()
+        if row is None:
+            return None
+        connection.execute(
+            """UPDATE evidence SET status=?, last_verified_at=?, verify_count=verify_count+1
+            WHERE id=?""",
+            (status, occurred_at, evidence_id),
+        )
+        note = (
+            "Integrity verified: stored digest matches recorded digest."
+            if verified
+            else f"INTEGRITY FAILURE: observed {observed_sha256}, expected {row['sha256']}."
+        )
+        _insert_custody(
+            connection, evidence_id,
+            "verified" if verified else "verify_failed",
+            "local", note, observed_sha256, occurred_at,
+        )
+        append_audit(
+            connection, "evidence", evidence_id,
+            "evidence.verified" if verified else "evidence.integrity_failed", occurred_at,
+            {"expected": row["sha256"], "observed": observed_sha256},
+        )
+        return connection.execute("SELECT * FROM evidence WHERE id=?", (evidence_id,)).fetchone()
+
+
+def mark_evidence_missing(evidence_id: str, occurred_at: str) -> sqlite3.Row | None:
+    with session() as connection:
+        row = connection.execute("SELECT * FROM evidence WHERE id=?", (evidence_id,)).fetchone()
+        if row is None:
+            return None
+        connection.execute("UPDATE evidence SET status='missing' WHERE id=?", (evidence_id,))
+        _insert_custody(
+            connection, evidence_id, "verify_failed", "local",
+            "Stored object is missing from the evidence store.", row["sha256"], occurred_at,
+        )
+        append_audit(
+            connection, "evidence", evidence_id, "evidence.object_missing", occurred_at,
+            {"sha256": row["sha256"]},
+        )
+        return connection.execute("SELECT * FROM evidence WHERE id=?", (evidence_id,)).fetchone()
+
+
+def link_evidence_to_case(
+    evidence_id: str, case_id: str, occurred_at: str, actor: str = "local",
+) -> bool:
+    with session() as connection:
+        evidence = connection.execute(
+            "SELECT * FROM evidence WHERE id=?", (evidence_id,)
+        ).fetchone()
+        if evidence is None:
+            return False
+        if connection.execute("SELECT 1 FROM cases WHERE id=?", (case_id,)).fetchone() is None:
+            return False
+        connection.execute(
+            "UPDATE evidence SET case_id=? WHERE id=?", (case_id, evidence_id)
+        )
+        details = {"evidence_id": evidence_id, "sha256": evidence["sha256"],
+                   "name": evidence["original_name"]}
+        _insert_custody(
+            connection, evidence_id, "case_linked", actor,
+            f"Linked to case {case_id}.", evidence["sha256"], occurred_at,
+        )
+        connection.execute(
+            """INSERT INTO case_timeline (case_id, entry_type, actor, details, occurred_at)
+            VALUES (?,'evidence.linked',?,?,?)""",
+            (case_id, actor, json.dumps(details, separators=(",", ":")), occurred_at),
+        )
+        connection.execute("UPDATE cases SET updated_at=? WHERE id=?", (occurred_at, case_id))
+        append_audit(
+            connection, "evidence", evidence_id, "evidence.case_linked", occurred_at,
+            {"case_id": case_id}, actor=actor,
+        )
+        return True
+
+
+def row_to_evidence(row: sqlite3.Row) -> dict:
+    item = dict(row)
+    item.pop("storage_path", None)
+    item["object_ref"] = f"objects/{item['sha256'][:2]}/{item['sha256']}"
+    return item
+
+
+def row_to_custody(row: sqlite3.Row) -> dict:
+    return dict(row)
