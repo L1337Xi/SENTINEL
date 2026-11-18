@@ -10,7 +10,7 @@ MAX_BYTES = 64 * 1024 * 1024
 def _run(args: list[str]) -> str:
     try:
         p = subprocess.run(args, capture_output=True, text=True, timeout=8, check=False)
-        return p.stdout[:12000] if p.returncode == 0 else ""
+        return p.stdout[:12000]
     except (OSError, subprocess.TimeoutExpired):
         return ""
 
@@ -40,7 +40,7 @@ def _package(path: Path, md5: str) -> dict[str, Any]:
     expected = next((line.split()[1].lower() for line in conf.splitlines()
                      if len(line.split()) >= 2 and line.split()[0] == str(path)), None)
     checksum_match = expected == md5 if expected else None
-    integrity = "verified" if not verify and checksum_match is not False else "mismatch"
+    integrity = "verified" if not verify and (checksum_match is True or expected is None) else "mismatch"
     policy = _run(["apt-cache", "policy", owner])
     sources = [line.strip() for line in policy.splitlines() if "http://" in line or "https://" in line]
     return {"owned": True, "package": owner, "integrity": integrity,
@@ -77,9 +77,16 @@ def investigate_file(path_value: str, expected_sha256: str | None = None) -> dic
 def _root() -> Path:
     return Path(os.environ.get("SENTINEL_QUARANTINE_DIR", "/var/lib/sentinel/quarantine")).resolve()
 
+def _protected_path(path: Path) -> bool:
+    resolved = path.resolve()
+    protected = ("/etc", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/boot",
+                 "/var/lib/dpkg", "/var/lib/sentinel")
+    return any(resolved == Path(root) or Path(root) in resolved.parents for root in protected)
+
 def quarantine_file(path_value: str, expected_sha256: str) -> dict[str, Any]:
     path = Path(path_value)
     if not path.is_absolute(): raise ValueError("Finding path must be absolute.")
+    if _protected_path(path): raise PermissionError("System and package configuration paths are protected from quarantine.")
     sha, md5, info = _hash(path)
     if sha != expected_sha256.lower(): raise ValueError("File changed since scan; quarantine refused.")
     if _package(path, md5)["owned"]: raise PermissionError("Package-managed files are protected. Use the package manager.")
@@ -123,6 +130,7 @@ def restore_quarantined(item_id: str) -> dict[str, Any]:
 def permanently_delete_file(path_value: str, expected_sha256: str, confirmation: str) -> dict[str, Any]:
     path = Path(path_value)
     if not path.is_absolute(): raise ValueError("Finding path must be absolute.")
+    if _protected_path(path): raise PermissionError("System and package configuration paths are protected from permanent deletion.")
     if confirmation != f"DELETE {expected_sha256.lower()}":
         raise PermissionError("Type DELETE followed by the full SHA-256 to confirm permanent deletion.")
     sha, md5, info = _hash(path)
