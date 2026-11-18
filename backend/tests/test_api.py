@@ -190,3 +190,45 @@ def test_audit_log_does_not_duplicate_noop_status_changes(tmp_path, monkeypatch)
         after = client.get("/api/audit-log").json()["total"]
         assert created.status_code == 201
         assert before == after
+
+
+def test_incident_case_lifecycle_links_events_and_records_timeline(tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "DATABASE_PATH", tmp_path / "cases.db")
+    with TestClient(app) as client:
+        event = client.post("/api/events", json={
+            "source":"auth-agent","event_type":"authentication_failure",
+            "message":"Repeated login failures","metadata":{"attempts":8},
+        })
+        case_response = client.post("/api/cases", json={
+            "title":"Investigate repeated authentication failures",
+            "description":"Initial triage for lab host.","severity":"high",
+        })
+        assert event.status_code == 201 and case_response.status_code == 201
+        case = case_response.json()
+        assert case["status"] == "open"
+        event_id = event.json()["id"]
+        assert client.post(f"/api/cases/{case['id']}/events",json={"event_id":event_id}).status_code == 201
+        assert client.post(f"/api/cases/{case['id']}/events",json={"event_id":event_id}).status_code == 201
+        assert client.post(f"/api/cases/{case['id']}/notes",json={"content":"Validate source IP."}).status_code == 201
+        updated = client.patch(f"/api/cases/{case['id']}",json={"status":"investigating","severity":"critical"})
+        assert updated.status_code == 200
+        detail = client.get(f"/api/cases/{case['id']}").json()
+        assert len(detail["events"]) == 1 and detail["events"][0]["id"] == event_id
+        timeline = client.get(f"/api/cases/{case['id']}/timeline").json()["items"]
+        assert [x["entry_type"] for x in timeline] == ["case.updated","note.added","event.linked","case.created"]
+        assert client.get("/api/audit-log",params={"entity_type":"case"}).status_code == 200
+
+
+def test_case_validation_filters_and_close_reopen(tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "DATABASE_PATH", tmp_path / "case-validation.db")
+    with TestClient(app) as client:
+        assert client.post("/api/cases",json={"title":"  "}).status_code == 422
+        high = client.post("/api/cases",json={"title":"High priority case","severity":"high"}).json()
+        client.post("/api/cases",json={"title":"Low priority case","severity":"low"})
+        assert client.get("/api/cases",params={"severity":"high"}).json()["total"] == 1
+        closed = client.patch(f"/api/cases/{high['id']}",json={"status":"resolved"}).json()
+        assert closed["closed_at"] is not None
+        reopened = client.patch(f"/api/cases/{high['id']}",json={"status":"investigating"}).json()
+        assert reopened["closed_at"] is None
+        assert client.patch(f"/api/cases/{high['id']}",json={}).status_code == 422
+        assert client.get("/api/cases/not-a-uuid").status_code == 404

@@ -57,3 +57,64 @@ class EventPage(BaseModel):
 class AlertUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: Literal["acknowledged", "resolved"]
+
+
+CaseSeverity = Literal["low", "medium", "high", "critical"]
+CaseStatus = Literal["open", "investigating", "contained", "resolved", "closed"]
+
+
+class CaseCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=3, max_length=200)
+    description: str = Field(default="", max_length=8000)
+    severity: CaseSeverity = "medium"
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Case title cannot be blank.")
+        return value
+
+
+class CaseUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str | None = Field(default=None, min_length=3, max_length=200)
+    description: str | None = Field(default=None, max_length=8000)
+    severity: CaseSeverity | None = None
+    status: CaseStatus | None = None
+
+    @field_validator("title")
+    @classmethod
+    def validate_optional_title(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        if not value:
+            raise ValueError("Case title cannot be blank.")
+        return value
+
+    def changes(self) -> dict[str, str]:
+        values = self.model_dump(exclude_unset=True)
+        if not values or any(value is None for value in values.values()):
+            raise ValueError("Provide at least one non-null case field.")
+        return values
+
+
+class CaseEventLink(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    event_id: UUID
+
+
+class CaseNoteCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    content: str = Field(min_length=1, max_length=8000)
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Note content cannot be blank.")
+        return value

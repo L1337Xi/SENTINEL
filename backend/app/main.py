@@ -12,7 +12,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import CORS_ORIGINS, MAX_PAGE_SIZE
 from .database import (
+    add_case_note,
     append_audit,
+    create_case,
+    get_case as fetch_case,
+    link_event_to_case,
+    list_case_events,
+    list_case_timeline,
+    list_cases,
+    row_to_case,
+    row_to_case_timeline,
+    update_case,
     create_alert,
     create_scan,
     initialize_database,
@@ -28,7 +38,7 @@ from .database import (
 )
 from .detections import RULES, evaluate_event
 from .scanner import network_discovery, system_inventory, validate_local_network
-from .schemas import AlertUpdate, EventCreate, EventPage, NetworkScanCreate
+from .schemas import AlertUpdate, CaseCreate, CaseEventLink, CaseNoteCreate, CaseUpdate, EventCreate, EventPage, NetworkScanCreate
 
 app = FastAPI(
     title="L1337XI SENTINEL API",
@@ -209,10 +219,88 @@ def change_alert_status(alert_id: str, payload: AlertUpdate) -> dict:
     return row_to_alert(row)
 
 
+@app.post("/api/cases", status_code=201, tags=["cases"])
+def create_incident_case(payload: CaseCreate) -> dict:
+    now = datetime.now(UTC).isoformat()
+    return row_to_case(create_case(str(uuid4()),payload.title,payload.description,payload.severity,now))
+
+
+@app.get("/api/cases", tags=["cases"])
+def get_cases(
+    status: str | None = Query(default=None, pattern="^(open|investigating|contained|resolved|closed)$"),
+    severity: str | None = Query(default=None, pattern="^(low|medium|high|critical)$"),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict:
+    rows = list_cases(status,severity,limit)
+    return {"items":[row_to_case(row) for row in rows],"total":len(rows)}
+
+
+@app.get("/api/cases/{case_id}", tags=["cases"])
+def get_case_detail(case_id: str) -> dict:
+    try:
+        normalized = str(UUID(case_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=404,detail="Case not found.") from exc
+    row = fetch_case(normalized)
+    if row is None:
+        raise HTTPException(status_code=404,detail="Case not found.")
+    events = list_case_events(normalized)
+    return {**row_to_case(row),"events":[{**row_to_event(e),"linked_at":e["linked_at"]} for e in events]}
+
+
+@app.patch("/api/cases/{case_id}", tags=["cases"])
+def patch_case(case_id: str, payload: CaseUpdate) -> dict:
+    try:
+        normalized = str(UUID(case_id))
+        changes = payload.changes()
+    except (ValueError,TypeError) as exc:
+        raise HTTPException(status_code=422,detail=str(exc)) from exc
+    row = update_case(normalized,changes,datetime.now(UTC).isoformat())
+    if row is None:
+        raise HTTPException(status_code=404,detail="Case not found.")
+    return row_to_case(row)
+
+
+@app.post("/api/cases/{case_id}/events", status_code=201, tags=["cases"])
+def attach_event(case_id: str, payload: CaseEventLink) -> dict:
+    try:
+        normalized = str(UUID(case_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=404,detail="Case not found.") from exc
+    event_id = str(payload.event_id)
+    if not link_event_to_case(normalized,event_id,datetime.now(UTC).isoformat()):
+        raise HTTPException(status_code=404,detail="Case or event not found.")
+    return {"case_id":normalized,"event_id":event_id,"linked":True}
+
+
+@app.post("/api/cases/{case_id}/notes", status_code=201, tags=["cases"])
+def create_case_note(case_id: str, payload: CaseNoteCreate) -> dict:
+    try:
+        normalized = str(UUID(case_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=404,detail="Case not found.") from exc
+    created = datetime.now(UTC).isoformat()
+    if not add_case_note(normalized,payload.content,created):
+        raise HTTPException(status_code=404,detail="Case not found.")
+    return {"case_id":normalized,"content":payload.content,"created_at":created}
+
+
+@app.get("/api/cases/{case_id}/timeline", tags=["cases"])
+def get_case_history(case_id: str, limit: int=Query(default=200,ge=1,le=500)) -> dict:
+    try:
+        normalized = str(UUID(case_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=404,detail="Case not found.") from exc
+    if fetch_case(normalized) is None:
+        raise HTTPException(status_code=404,detail="Case not found.")
+    rows = list_case_timeline(normalized,limit)
+    return {"items":[row_to_case_timeline(row) for row in rows],"total":len(rows)}
+
+
 @app.get("/api/audit-log", tags=["audit"])
 def get_audit_log(
     limit: int = Query(default=100, ge=1, le=500),
-    entity_type: str | None = Query(default=None, pattern="^(event|alert)$"),
+    entity_type: str | None = Query(default=None, pattern="^(event|alert|case)$"),
 ) -> dict:
     rows = list_audit_log(limit, entity_type)
     return {"items": [row_to_audit(row) for row in rows], "total": len(rows)}

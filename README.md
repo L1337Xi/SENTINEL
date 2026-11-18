@@ -25,7 +25,7 @@ SENTINEL is a self-hosted security operations platform under active development.
 6. **Investigate** with event pivots, evidence references, analyst notes, and case history.
 7. **Report** findings with traceable references to the underlying evidence.
 
-Only the initial event-storage path is implemented today. The remaining stages are part of the roadmap.
+The current implementation includes local event ingestion, one deterministic authentication detection rule, alert triage, append-only audit records, read-only host inventory, scoped private-network discovery, and an initial incident-case workflow. Sigma interoperability, broad event-source adapters, evidence acquisition, YARA, PCAP analysis, authentication, and release hardening remain on the roadmap.
 
 ## Capability status
 
@@ -38,7 +38,8 @@ Only the initial event-storage path is implemented today. The remaining stages a
 | Authentication and role-based access control | Not implemented |
 | Windows, Sysmon, and Linux log parsers | Planned |
 | Sigma-compatible and custom detection | Planned |
-| Alert triage and incident management | Planned |
+| Detection alerts and alert lifecycle | Implemented (initial rule set) |
+| Incident cases, linked events, notes, and timelines | Implemented (initial workflow) |
 | Event correlation and investigation timelines | Planned |
 | Evidence hashing and chain of custody | Planned |
 | YARA-assisted file analysis | Planned |

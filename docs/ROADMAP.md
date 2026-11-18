@@ -9,7 +9,7 @@
 - [ ] Event source adapters and normalization
 - [x] Initial deterministic detection rule and alert lifecycle (open, acknowledged, resolved)
 - [ ] Sigma-compatible rule ingestion, validation, and evaluation
-- [ ] Correlation, incident cases, and investigation timelines
+- [x] Incident cases, event linking, analyst notes, and investigation timelines
 - [ ] Evidence intake, hashing, metadata, and chain of custody
 - [ ] YARA-assisted analysis workflow
 - [ ] Offline PCAP analysis and optional Zeek/Suricata integrations
