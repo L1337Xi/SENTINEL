@@ -1,6 +1,12 @@
 """Evidence-led file investigation and guarded local response actions."""
 from __future__ import annotations
-import hashlib, json, os, shutil, stat, subprocess, uuid
+import hashlib
+import json
+import os
+import shutil
+import stat
+import subprocess
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -25,7 +31,8 @@ def _hash(path: Path):
     try:
         with os.fdopen(fd, "rb", closefd=False) as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                sha.update(chunk); md5.update(chunk)
+                sha.update(chunk)
+                md5.update(chunk)
     finally:
         os.close(fd)
     return sha.hexdigest(), md5.hexdigest(), info
@@ -52,7 +59,8 @@ def _package(path: Path, md5: str) -> dict[str, Any]:
 
 def investigate_file(path_value: str, expected_sha256: str | None = None) -> dict[str, Any]:
     path = Path(path_value)
-    if not path.is_absolute(): raise ValueError("Finding path must be absolute.")
+    if not path.is_absolute():
+        raise ValueError("Finding path must be absolute.")
     sha, md5, info = _hash(path)
     if expected_sha256 and sha != expected_sha256.lower():
         raise ValueError("File changed since scan; run a new assessment before taking action.")
@@ -86,11 +94,15 @@ def _protected_path(path: Path) -> bool:
 def quarantine_file(path_value: str, expected_sha256: str) -> dict[str, Any]:
     path = Path(path_value)
     if not path.is_absolute(): raise ValueError("Finding path must be absolute.")
-    if _protected_path(path): raise PermissionError("System and package configuration paths are protected from quarantine.")
+    if _protected_path(path):
+        raise PermissionError("System and package configuration paths are protected from quarantine.")
     sha, md5, info = _hash(path)
-    if sha != expected_sha256.lower(): raise ValueError("File changed since scan; quarantine refused.")
-    if _package(path, md5)["owned"]: raise PermissionError("Package-managed files are protected. Use the package manager.")
-    if info.st_nlink > 1: raise PermissionError("Files with multiple hard links are protected.")
+    if sha != expected_sha256.lower():
+        raise ValueError("File changed since scan; quarantine refused.")
+    if _package(path, md5)["owned"]:
+        raise PermissionError("Package-managed files are protected. Use the package manager.")
+    if info.st_nlink > 1:
+        raise PermissionError("Files with multiple hard links are protected.")
     root = _root(); root.mkdir(parents=True, exist_ok=True, mode=0o700); os.chmod(root, 0o700)
     item_id = str(uuid.uuid4()); stored = root / item_id; manifest = root / f"{item_id}.json"
     shutil.copy2(path, stored); os.chmod(stored, 0o600)
@@ -107,35 +119,48 @@ def quarantine_file(path_value: str, expected_sha256: str) -> dict[str, Any]:
 
 def list_quarantine() -> list[dict[str, Any]]:
     root = _root()
-    if not root.is_dir(): return []
+    if not root.is_dir():
+        return []
     records = []
     for item in root.glob("*.json"):
-        try: records.append(json.loads(item.read_text(encoding="utf-8")))
-        except (OSError, json.JSONDecodeError): continue
+        try:
+            records.append(json.loads(item.read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError):
+            continue
     return records[:500]
 
 def restore_quarantined(item_id: str) -> dict[str, Any]:
     normalized = str(uuid.UUID(item_id)); root = _root()
     manifest = root / f"{normalized}.json"; record = json.loads(manifest.read_text(encoding="utf-8"))
     stored, original = root / normalized, Path(record["original_path"])
-    if original.exists() or original.is_symlink(): raise FileExistsError("Original path exists; restore will not overwrite it.")
-    if _hash(stored)[0] != record["sha256"]: raise ValueError("Quarantine integrity check failed.")
-    original.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(stored, original)
-    os.chown(original, int(record["uid"]), int(record["gid"])); os.chmod(original, int(record["mode"]))
+    if original.exists() or original.is_symlink():
+        raise FileExistsError("Original path exists; restore will not overwrite it.")
+    if _hash(stored)[0] != record["sha256"]:
+        raise ValueError("Quarantine integrity check failed.")
+    original.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(stored, original)
+    os.chown(original, int(record["uid"]), int(record["gid"]))
+    os.chmod(original, int(record["mode"]))
     if _hash(original)[0] != record["sha256"]:
-        original.unlink(missing_ok=True); raise OSError("Restored file failed verification.")
-    stored.unlink(); manifest.unlink()
+        original.unlink(missing_ok=True)
+        raise OSError("Restored file failed verification.")
+    stored.unlink()
+    manifest.unlink()
     return {"id": normalized, "restored": True, "path": str(original), "sha256": record["sha256"]}
 
 def permanently_delete_file(path_value: str, expected_sha256: str, confirmation: str) -> dict[str, Any]:
     path = Path(path_value)
     if not path.is_absolute(): raise ValueError("Finding path must be absolute.")
-    if _protected_path(path): raise PermissionError("System and package configuration paths are protected from permanent deletion.")
+    if _protected_path(path):
+        raise PermissionError("System and package configuration paths are protected from permanent deletion.")
     if confirmation != f"DELETE {expected_sha256.lower()}":
         raise PermissionError("The exact confirmation must be DELETE followed by the full SHA-256.")
     sha, md5, info = _hash(path)
-    if sha != expected_sha256.lower(): raise ValueError("File changed since scan; deletion refused.")
-    if _package(path, md5)["owned"]: raise PermissionError("Package-managed files cannot be deleted by SENTINEL.")
-    if info.st_nlink > 1: raise PermissionError("Files with multiple hard links are protected.")
+    if sha != expected_sha256.lower():
+        raise ValueError("File changed since scan; deletion refused.")
+    if _package(path, md5)["owned"]:
+        raise PermissionError("Package-managed files cannot be deleted by SENTINEL.")
+    if info.st_nlink > 1:
+        raise PermissionError("Files with multiple hard links are protected.")
     path.unlink()
     return {"deleted": True, "path": str(path), "sha256": sha, "deleted_at": datetime.now(UTC).isoformat()}
