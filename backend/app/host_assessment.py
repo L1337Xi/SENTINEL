@@ -117,7 +117,7 @@ def _severity_for_mode(mode: int) -> str | None:
         return "high"
     if mode & stat.S_ISGID:
         return "medium"
-    if mode & stat.S_IWOTH:
+    if mode & stat.S_IWOTH and mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
         return "medium"
     return None
 
@@ -264,8 +264,8 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
                 if mode_severity:
                     findings.append({
                         "id": f"permission-{sha256[:12]}", "category": "configuration",
-                        "severity": mode_severity, "title": "Sensitive permission bit or world-writable file",
-                        "description": "Review this file's ownership and permissions; this is not by itself proof of compromise.",
+                        "severity": mode_severity, "title": "Sensitive permission bit or world-writable executable",
+                        "description": "Review this executable's ownership and permissions; this is not by itself proof of compromise.",
                         "path": str(path), "sha256": sha256, "evidence": f"mode={oct(mode)}",
                         "confidence": "medium", "source": "filesystem_permission_audit",
                     })
