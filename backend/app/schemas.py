@@ -37,6 +37,11 @@ class EventCreate(BaseModel):
         return value.astimezone(UTC)
 
 
+class NetworkScanCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    network: str = Field(min_length=9, max_length=43)
+
+
 class EventRecord(EventCreate):
     id: UUID
     ingested_at: datetime
