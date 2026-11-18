@@ -566,6 +566,7 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
               const investigation = asObject(investigations[findingId]);
               const packageInfo = asObject(investigation.package);
               const assessmentInfo = asObject(investigation.assessment);
+              const hasInvestigation = Boolean(investigation.assessment);
               const isPackageManaged = packageInfo.owned === true;
               return <div className="capability-report" key={findingId}>
                 <div className="capability-flow">
@@ -582,7 +583,7 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
                   <button className="button button-danger" onClick={() => void respondFinding(finding, "quarantine")} disabled={responseBusy === findingId || isPackageManaged || !finding.sha256}>Quarantine</button>
                   <button className="text-action history-delete" onClick={() => void respondFinding(finding, "delete")} disabled={responseBusy === findingId || isPackageManaged || !finding.sha256}>Delete permanently</button>
                 </div>
-                {investigation.assessment && <div className="scope-note"><span className="scope-mark">i</span><p>{String(assessmentInfo.rationale ?? "")} {isPackageManaged ? `Package: ${String(packageInfo.package)} · Integrity: ${String(packageInfo.integrity)} · Provenance: ${String(packageInfo.provenance)}` : "No owning package was confirmed."} File type: {String(investigation.file_type ?? "unknown")}.</p></div>}
+                {hasInvestigation && <div className="scope-note"><span className="scope-mark">i</span><p>{String(assessmentInfo.rationale ?? "")} {isPackageManaged ? `Package: ${String(packageInfo.package)} · Integrity: ${String(packageInfo.integrity)} · Provenance: ${String(packageInfo.provenance)}` : "No owning package was confirmed."} File type: {String(investigation.file_type ?? "unknown")}.</p></div>}
                 {responseMessages[findingId] && <p className="history-note">{responseMessages[findingId]}</p>}
                 {isPackageManaged && <p className="history-note">Package-managed file: SENTINEL disables quarantine and permanent deletion. Use the OS package manager after investigation.</p>}
               </div>;
