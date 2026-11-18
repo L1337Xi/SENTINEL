@@ -247,8 +247,6 @@ def test_clamav_streams_current_file_and_scan_count(tmp_path, monkeypatch):
 
 
 def test_malwarebazaar_feed_is_cached_between_scans(tmp_path, monkeypatch):
-    from io import BytesIO
-
     digest = hashlib.sha256(b"cached malware fixture").hexdigest()
     monkeypatch.setenv("SENTINEL_MALWAREBAZAAR_API_KEY", "test-key")
     monkeypatch.setenv("SENTINEL_THREAT_INTEL_CACHE", str(tmp_path / "intel.json"))
@@ -284,8 +282,6 @@ def test_malwarebazaar_feed_is_cached_between_scans(tmp_path, monkeypatch):
 
 
 def test_circl_known_file_lookup_is_cached_and_not_a_malware_finding(tmp_path, monkeypatch):
-    from urllib.error import HTTPError
-
     digest = hashlib.sha256(b"known benign fixture").hexdigest()
     monkeypatch.setenv("SENTINEL_THREAT_INTEL_CACHE", str(tmp_path / "intel.json"))
     calls = []
