@@ -401,6 +401,8 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
   const clamav = asObject(malwareEngines.clamav);
   const threatIntel = asObject(assessment.threat_intelligence);
   const malwareBazaar = asObject(threatIntel.malwarebazaar);
+  const circlIntel = asObject(threatIntel.circl_hashlookup);
+  const knownFileContext = asArray<Record<string, unknown>>(threatIntel.known_file_context);
   const persistence = asArray<Record<string, unknown>>(assessment.persistence_inventory);
   const privilegedAccounts = asObject(assessment.privileged_accounts);
   const uidZeroAccounts = asArray<Record<string, unknown>>(privilegedAccounts.uid_zero_accounts);
@@ -418,7 +420,7 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
     <PageHeading eyebrow="ASSESSMENT / LOCAL HOST" title="Host assessment" description="Read-only inventory of the machine running the SENTINEL backend.">
       <ActionButton onClick={onStart} disabled={busy}>↻ Run assessment</ActionButton>
     </PageHeading>
-    <div className="scope-note host-scope"><span className="scope-mark">i</span><p>This performs a bounded, read-only local assessment: host inventory, SHA-256 file hashing against local indicators and an optional live MalwareBazaar feed, static script-pattern review and selected security-configuration checks. Suspicious files are never executed, changed, quarantined or uploaded. File-count, size and time limits apply; a clean result does not prove the system is malware-free.</p></div>
+    <div className="scope-note host-scope"><span className="scope-mark">i</span><p>This performs a bounded, read-only local assessment: host inventory, SHA-256 file hashing against local indicators and optional MalwareBazaar/CIRCL hash intelligence, static script-pattern review and selected security-configuration checks. Only hashes are sent to configured external providers; file contents and local paths are never uploaded. Suspicious files are never executed, changed or quarantined. File-count, size and time limits apply; a clean result does not prove the system is malware-free.</p></div>
     <section className="panel full-panel scan-panel"><div className="panel-title"><div><div className="eyebrow">ASSESSMENT STATUS</div><h2>Latest host inventory</h2></div><span className="section-note">{hostScans.length} TOTAL RUNS</span></div><ScanHeader scan={scan} />
       <section className="host-history" aria-label="Previous host assessment results">
         <div className="result-heading"><div><h3>Previous scan history</h3><span>{hostScans.length} SAVED RESULTS</span></div>
@@ -446,7 +448,7 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
           <span className="live-progress-indicator" />
         </div>
         {progressPhase === "clamav" && <Resource label="CLAMAV FILES SCANNED" value={String(liveProgress.clamav_files_scanned ?? 0)} detail="Files reported by ClamAV as its scan runs" />}
-        <div className="live-current"><span className="meta-label">{progressPhase === "clamav" ? "CLAMAV CURRENT FILE" : "CURRENT FILE / LOCATION"}</span><code>{String(liveProgress.current_path ?? (progressPhase === "clamav" ? "Waiting for ClamAV to report its first file…" : progressPhase === "threat intelligence" ? "Checking the latest MalwareBazaar hash feed…" : "Preparing assessment…"))}</code></div>
+        <div className="live-current"><span className="meta-label">{progressPhase === "clamav" ? "CLAMAV CURRENT FILE" : "CURRENT FILE / LOCATION"}</span><code>{String(liveProgress.current_path ?? (progressPhase === "clamav" ? "Waiting for ClamAV to report its first file…" : progressPhase === "threat intelligence" ? "Checking optional hash intelligence providers…" : "Preparing assessment…"))}</code></div>
         <p className="live-note">Updates are polled from the local scanner. The filesystem time remaining is a scan budget, not a guaranteed completion ETA. ClamAV progress is streamed from its local scan output; the file count reflects reported results.</p>
       </section>}
       {scan?.status === "failed" && <div className="scan-error">{scan.error ?? "The assessment failed."}</div>}
@@ -479,12 +481,21 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
           <div className="result-heading"><h3>Security assessment report</h3><button className="button button-secondary" onClick={() => downloadJson(`sentinel-host-report-${scan?.id ?? "latest"}.json`, { scan, security_assessment: assessment })}>Export JSON report ↓</button></div>
           <div className="resource-grid">
             <Resource label="FILES HASHED" value={String(assessmentSummary.files_hashed ?? 0)} detail={`${String(assessmentSummary.files_seen ?? 0)} files visited`} />
-            <Resource label="MALWARE MATCHES" value={String(assessmentSummary.malware_matches ?? 0)} detail="Exact local and live-feed hash matches" />
+            <Resource label="MALWARE MATCHES" value={String(assessmentSummary.malware_matches ?? 0)} detail="Exact local and MalwareBazaar hash matches" />
             <Resource label="CONFIG FINDINGS" value={String(assessmentSummary.configuration_findings ?? 0)} detail="Review required; not all are vulnerabilities" />
             <Resource label="SCAN STATUS" value={assessmentSummary.truncated ? "LIMIT REACHED" : "COMPLETED"} detail={assessmentSummary.truncated ? "File or time budget reached" : "Configured scan scope completed"} />
             <Resource label="CLAMAV ENGINE" value={clamav.executed ? "EXECUTED" : clamav.available ? "AVAILABLE" : "NOT INSTALLED"} detail={String(clamav.version ?? clamav.note ?? "No local engine detected")} />
-            <Resource label="MALWAREBAZAAR" value={malwareBazaar.status === "ok" ? "LIVE FEED" : malwareBazaar.status === "unavailable" ? "UNAVAILABLE" : "NOT CONFIGURED"} detail={malwareBazaar.status === "ok" ? `${String(malwareBazaar.records_received ?? 0)} recent hashes checked` : String(malwareBazaar.note ?? "Optional live hash intelligence")} />
+            <Resource label="MALWAREBAZAAR" value={malwareBazaar.status === "ok" ? (malwareBazaar.cached ? "CACHED FEED" : "LIVE FEED") : malwareBazaar.status === "stale" ? "STALE CACHE" : malwareBazaar.status === "unavailable" ? "UNAVAILABLE" : "NOT CONFIGURED"} detail={malwareBazaar.status === "ok" || malwareBazaar.status === "stale" ? `${String(malwareBazaar.records_received ?? 0)} recent hashes · ${malwareBazaar.cache_age_seconds === undefined ? "just refreshed" : `${String(malwareBazaar.cache_age_seconds)}s cache age`}` : String(malwareBazaar.note ?? "Optional live malware hash feed")} />
+            <Resource label="CIRCL HASHLOOKUP" value={circlIntel.status === "ok" ? `${String(circlIntel.known_file_matches ?? 0)} KNOWN FILES` : String(circlIntel.status ?? "NOT RUN").toUpperCase()} detail={`${String(circlIntel.lookups_performed ?? 0)} remote lookups · ${String(circlIntel.cache_hits ?? 0)} cache hits · context only`} />
           </div>
+          {knownFileContext.length > 0 && <div className="result-section">
+            <div className="result-heading"><h3>Known-file context · CIRCL</h3><span>{knownFileContext.length} HASH MATCHES</span></div>
+            <p className="history-note">Reference-database matches provide file context only. They are not malware detections and do not prove a file is safe.</p>
+            <div className="simple-table inventory-list">{knownFileContext.map((item, index) => <div className="simple-row" key={String(item.sha256) + index} style={{gridTemplateColumns:"1fr auto"}}>
+              <strong>{String(item.file_name || "Known file")}</strong><small>{String(item.product_name || item.source || item.database || "Reference database")} · trust {String(item.trust ?? "not supplied")}</small>
+              <span>{asArray<string>(item.paths).join(", ")}</span>
+            </div>)}</div>
+          </div>}
           <AssessmentFindingCharts findings={findings} capabilities={capabilities} />
           <div className="result-section">
             <div className="result-heading"><h3>Persistence inventory</h3><span>{persistence.length} STARTUP ENTRIES</span></div>
