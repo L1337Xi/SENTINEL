@@ -38,7 +38,7 @@ To provide local SHA-256 indicators, create a JSON file such as `/etc/sentinel/h
 ```json
 {
   "indicators": {
-    "REPLACE_WITH_64_CHARACTER_SHA256": {
+    "0000000000000000000000000000000000000000000000000000000000000000": {
       "label": "Analyst-provided sample name",
       "severity": "critical",
       "description": "Source and context for this indicator",
