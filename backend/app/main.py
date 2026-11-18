@@ -1,9 +1,12 @@
 """SENTINEL local API entry point."""
 from __future__ import annotations
 
+import json
+import sqlite3
 from datetime import UTC, datetime
 from uuid import uuid4
-import json
+
+import psutil
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -103,7 +106,7 @@ def _execute_scan(scan_id: str, scan_type: str, target: str) -> None:
     try:
         result = system_inventory() if scan_type == "system" else network_discovery(target)
         update_scan(scan_id, status="completed", result=result, completed_at=datetime.now(UTC).isoformat())
-    except Exception as exc:
+    except (OSError, RuntimeError, ValueError, TypeError, sqlite3.Error, psutil.Error) as exc:
         update_scan(scan_id, status="failed", error=str(exc)[:500], completed_at=datetime.now(UTC).isoformat())
 
 
@@ -138,7 +141,7 @@ def start_system_scan(background_tasks: BackgroundTasks) -> dict:
 def start_network_scan(payload: NetworkScanCreate, background_tasks: BackgroundTasks) -> dict:
     try:
         network = validate_local_network(payload.network)
-    except ValueError as exc:
+    except (ValueError, TypeError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     scan_id = str(uuid4())
     started_at = datetime.now(UTC).isoformat()

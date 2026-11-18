@@ -52,7 +52,7 @@ def validate_local_network(value: str) -> ipaddress.IPv4Network:
     except ValueError as exc:
         raise ValueError("Enter a valid IPv4 CIDR network.") from exc
     if not isinstance(network, ipaddress.IPv4Network):
-        raise ValueError("Only IPv4 local networks are supported.")
+        raise TypeError("Only IPv4 local networks are supported.")
     if not network.is_private or network.prefixlen < 24:
         raise ValueError("Only private IPv4 ranges of /24 or smaller may be scanned.")
     if not any(network.subnet_of(ipaddress.ip_network(item["network"])) for item in local_networks()):
