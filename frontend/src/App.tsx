@@ -407,6 +407,46 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
   const privilegedAccounts = asObject(assessment.privileged_accounts);
   const uidZeroAccounts = asArray<Record<string, unknown>>(privilegedAccounts.uid_zero_accounts);
   const privilegedGroups = asArray<Record<string, unknown>>(privilegedAccounts.privileged_groups);
+  const [investigations, setInvestigations] = useState<Record<string, Record<string, unknown>>>({});
+  const [responseMessages, setResponseMessages] = useState<Record<string, string>>({});
+  const [quarantineItems, setQuarantineItems] = useState<Record<string, unknown>[]>([]);
+  const [responseBusy, setResponseBusy] = useState<string | null>(null);
+  useEffect(() => { void api.quarantine().then((data) => setQuarantineItems(data.items)).catch(() => setQuarantineItems([])); }, [scan?.id]);
+  const investigateFinding = async (finding: Record<string, unknown>) => {
+    if (!scan?.id) return;
+    const id = String(finding.id);
+    setResponseBusy(id); setResponseMessages((current) => ({ ...current, [id]: "" }));
+    try {
+      const report = await api.investigateFinding(scan.id, id);
+      setInvestigations((current) => ({ ...current, [id]: report }));
+    } catch (error) { setResponseMessages((current) => ({ ...current, [id]: error instanceof Error ? error.message : "Investigation failed." })); }
+    finally { setResponseBusy(null); }
+  };
+  const respondFinding = async (finding: Record<string, unknown>, action: "quarantine" | "delete") => {
+    if (!scan?.id) return;
+    const id = String(finding.id); const digest = String(finding.sha256 ?? "");
+    let confirmation = "";
+    if (action === "quarantine") {
+      if (!window.confirm("Move this file into SENTINEL quarantine? The original path will be removed after the quarantine copy is verified.")) return;
+    } else {
+      confirmation = window.prompt(`Permanent deletion cannot be undone. Type exactly: DELETE ${digest}`) ?? "";
+      if (!confirmation) return;
+    }
+    setResponseBusy(id);
+    try {
+      const result = await api.respondToFinding(scan.id, id, action, confirmation);
+      setResponseMessages((current) => ({ ...current, [id]: action === "quarantine" ? `Quarantined · ID ${String(result.id)}` : "Permanently deleted." }));
+      const data = await api.quarantine(); setQuarantineItems(data.items);
+    } catch (error) { setResponseMessages((current) => ({ ...current, [id]: error instanceof Error ? error.message : "Response action failed." })); }
+    finally { setResponseBusy(null); }
+  };
+  const restoreItem = async (item: Record<string, unknown>) => {
+    const id = String(item.id); if (!window.confirm(`Restore quarantined file to ${String(item.original_path)}?`)) return;
+    setResponseBusy(id);
+    try { await api.restoreQuarantine(id); const data = await api.quarantine(); setQuarantineItems(data.items); }
+    catch (error) { setResponseMessages((current) => ({ ...current, [id]: error instanceof Error ? error.message : "Restore failed." })); }
+    finally { setResponseBusy(null); }
+  };
 
   const processRows = processes.map((item) => (
     <div className="simple-row" key={String(item.pid)}>
@@ -522,7 +562,12 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
               const mapped = asArray<Record<string, unknown>>(finding.capabilities);
               const inferred = capabilities.filter((item) => item.path === finding.path);
               const labels = [...mapped, ...inferred];
-              return <div className="capability-report" key={String(finding.id ?? index)}>
+              const findingId = String(finding.id ?? index);
+              const investigation = asObject(investigations[findingId]);
+              const packageInfo = asObject(investigation.package);
+              const assessmentInfo = asObject(investigation.assessment);
+              const isPackageManaged = packageInfo.owned === true;
+              return <div className="capability-report" key={findingId}>
                 <div className="capability-flow">
                   <div className="flow-node"><small>FILE / SAMPLE</small><strong>{String(finding.title ?? "Detected file")}</strong><span>{String(finding.path ?? "Path unavailable")}</span></div>
                   <span className="flow-arrow">→</span>
@@ -531,10 +576,24 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
                   <div className="flow-node"><small>CAPABILITY EVIDENCE</small><strong>{labels.length ? labels.map((item) => String(item.label ?? item.id ?? "Indicator")).join(", ") : "Not established"}</strong><span>{labels.length ? "Static indicators; not runtime proof" : "No capability metadata available for this detection"}</span></div>
                 </div>
                 {typeof finding.sha256 === "string" && <small className="hash-line">SHA-256 · {finding.sha256}</small>}
+                <div className="finding-response-actions">
+                  <button className="button button-secondary" onClick={() => void investigateFinding(finding)} disabled={responseBusy === findingId}>{responseBusy === findingId ? "Investigating…" : investigation.assessment ? "Re-investigate file" : "Investigate file"}</button>
+                  {investigation.assessment && <span className="history-protected">{String(assessmentInfo.verdict ?? "unverified").replace(/_/g, " ").toUpperCase()} · {String(assessmentInfo.confidence ?? "unknown")} CONFIDENCE</span>}
+                  <button className="button button-danger" onClick={() => void respondFinding(finding, "quarantine")} disabled={responseBusy === findingId || isPackageManaged || !finding.sha256}>Quarantine</button>
+                  <button className="text-action history-delete" onClick={() => void respondFinding(finding, "delete")} disabled={responseBusy === findingId || isPackageManaged || !finding.sha256}>Delete permanently</button>
+                </div>
+                {investigation.assessment && <div className="scope-note"><span className="scope-mark">i</span><p>{String(assessmentInfo.rationale ?? "")} {isPackageManaged ? `Package: ${String(packageInfo.package)} · Integrity: ${String(packageInfo.integrity)} · Provenance: ${String(packageInfo.provenance)}` : "No owning package was confirmed."} File type: {String(investigation.file_type ?? "unknown")}.</p></div>}
+                {responseMessages[findingId] && <p className="history-note">{responseMessages[findingId]}</p>}
+                {isPackageManaged && <p className="history-note">Package-managed file: SENTINEL disables quarantine and permanent deletion. Use the OS package manager after investigation.</p>}
               </div>;
             })}
             <div className="scope-note"><span className="scope-mark">i</span><p>Flow nodes distinguish a detection from its possible capabilities. Capabilities come only from local indicator metadata or low-confidence script-pattern matches; SENTINEL does not execute malware, so runtime behaviour is not verified.</p></div>
           </div>}
+          <div className="result-section">
+            <div className="result-heading"><h3>Quarantine</h3><span>{quarantineItems.length} STORED ITEMS</span></div>
+            {quarantineItems.length === 0 ? <p className="history-note">No files are currently quarantined.</p> : quarantineItems.map((item) => <div className="host-history-row" key={String(item.id)}><div className="host-history-info"><strong>{String(item.original_path)}</strong><small>SHA-256 {String(item.sha256)} · {formatDate(String(item.quarantined_at))}</small></div><button className="button button-secondary" disabled={responseBusy === String(item.id)} onClick={() => void restoreItem(item)}>Restore</button></div>)}
+            <p className="history-note">Quarantined files are stored locally with restricted permissions. Restore never overwrites an existing file and verifies the SHA-256 before restoring.</p>
+          </div>
           {capabilities.length > 0 && <div className="result-section">
             <div className="result-heading"><h3>Static capability indicators</h3><span>INFERRED FROM SCRIPT TEXT · LOW CONFIDENCE</span></div>
             <div className="simple-table inventory-list">{capabilities.map((item, index) => <div className="simple-row" key={String(item.path) + String(item.id) + index} style={{gridTemplateColumns:"1fr 1fr"}}>
