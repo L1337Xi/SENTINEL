@@ -425,14 +425,7 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
             <Resource label="SCAN STATUS" value={assessmentSummary.truncated ? "LIMIT REACHED" : "COMPLETED"} detail={assessmentSummary.truncated ? "File or time budget reached" : "Configured scan scope completed"} />
             <Resource label="CLAMAV ENGINE" value={clamav.executed ? "EXECUTED" : clamav.available ? "AVAILABLE" : "NOT INSTALLED"} detail={String(clamav.version ?? clamav.note ?? "No local engine detected")} />
           </div>
-          <AssessmentFindingCharts findings={findings} />
-          <div className="simple-table">
-            {findings.length === 0 ? <div className="empty-state">No configured hash matches or flagged configuration items were found in the scanned scope. This is not a guarantee that the host is clean.</div> :
-              findings.map((finding, index) => <article className="simple-row" key={String(finding.id ?? index)} style={{gridTemplateColumns:"auto 1fr", alignItems:"start"}}>
-                <span className={`severity-badge ${String(finding.severity ?? "low")}`}>{String(finding.severity ?? "info").toUpperCase()}</span>
-                <div><strong>{String(finding.title ?? "Assessment finding")}</strong><small>{String(finding.category ?? "finding")} · {String(finding.path ?? finding.evidence ?? "Local configuration")}</small><p>{String(finding.description ?? "Review the evidence before taking action.")}</p>{typeof finding.sha256 === "string" && <small>SHA-256: {finding.sha256}</small>}</div>
-              </article>)}
-          </div>
+          <AssessmentFindingCharts findings={findings} capabilities={capabilities} />
           <div className="result-section">
             <div className="result-heading"><h3>Persistence inventory</h3><span>{persistence.length} STARTUP ENTRIES</span></div>
             <div className="simple-table">{persistence.length === 0 ? <div className="empty-state">No entries were visible in the inspected startup locations.</div> : persistence.map((item, index) => <div className="simple-row" key={String(item.path) + index} style={{gridTemplateColumns:"1fr auto"}}>
