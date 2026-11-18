@@ -490,7 +490,7 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
           </div>
           {knownFileContext.length > 0 && <div className="result-section">
             <div className="result-heading"><h3>Known-file context · CIRCL</h3><span>{knownFileContext.length} HASH MATCHES</span></div>
-            <p className="history-note">Reference-database matches provide file context only. They are not malware detections and do not prove a file is safe.</p>
+            <p className="history-note">Reference-database matches provide file context only. They are not malware detections and do not prove a file is safe. CIRCL trust is a database aggregation score, not a safety rating.</p>
             <div className="simple-table inventory-list">{knownFileContext.map((item, index) => <div className="simple-row" key={String(item.sha256) + index} style={{gridTemplateColumns:"1fr auto"}}>
               <strong>{String(item.file_name || "Known file")}</strong><small>{String(item.product_name || item.source || item.database || "Reference database")} · trust {String(item.trust ?? "not supplied")}</small>
               <span>{asArray<string>(item.paths).join(", ")}</span>
