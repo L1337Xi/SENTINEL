@@ -218,7 +218,6 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
     skipped_large = 0
     skipped_unreadable = 0
     truncated = False
-    errors: list[str] = []
     excluded = {str(root_path / item.lstrip("/")) for item in DEFAULT_EXCLUDES}
 
     for current, dirs, files in os.walk(root_path, topdown=True, followlinks=False):
