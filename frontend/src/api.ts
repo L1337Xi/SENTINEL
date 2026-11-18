@@ -5,6 +5,10 @@ export interface SecurityEvent {
 }
 export interface EventPage { items: SecurityEvent[]; total: number; limit: number; offset: number; }
 export interface NetworkInterface { interface: string; address: string; network: string; prefix_length: number; }
+export interface AlertRecord {
+  id: string; event_id: string; rule_id: string; title: string; severity: Severity;
+  status: "open" | "acknowledged" | "resolved"; description: string; created_at: string; updated_at: string;
+}
 export interface ScanRecord {
   id: string; scan_type: "system" | "network"; status: "queued" | "running" | "completed" | "failed";
   target: string; started_at: string; completed_at: string | null; result: Record<string, unknown> | null; error: string | null;
@@ -21,6 +25,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 export const api = {
+  alerts: () => request<{ items: AlertRecord[]; total: number }>("/api/alerts?limit=50"),
+  updateAlert: (id: string, status: "acknowledged" | "resolved") =>
+    request<AlertRecord>(`/api/alerts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ status }) }),
   health: () => request<{ status: string; service: string; version: string }>("/api/health"),
   events: (filters: { search?: string; severity?: string } = {}) => {
     const params = new URLSearchParams({ limit: "100" });

@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { api, type NetworkInterface, type ScanRecord, type SecurityEvent, type Severity } from "./api";
+import { api, type AlertRecord, type NetworkInterface, type ScanRecord, type SecurityEvent, type Severity } from "./api";
 
-type View = "overview" | "events" | "host" | "network";
+type View = "overview" | "events" | "alerts" | "host" | "network";
 const severityOrder: Severity[] = ["critical", "high", "medium", "low"];
 const navItems: { id: View; label: string; code: string }[] = [
   { id: "overview", label: "Overview", code: "01" },
   { id: "events", label: "Event stream", code: "02" },
-  { id: "host", label: "Host assessment", code: "03" },
-  { id: "network", label: "Network discovery", code: "04" },
+  { id: "alerts", label: "Detection alerts", code: "03" },
+  { id: "host", label: "Host assessment", code: "04" },
+  { id: "network", label: "Network discovery", code: "05" },
 ];
 
 function formatDate(value?: string | null): string {
@@ -33,6 +34,7 @@ function statusLabel(status: ScanRecord["status"]): string {
 export default function App() {
   const [view, setView] = useState<View>("overview");
   const [events, setEvents] = useState<SecurityEvent[]>([]);
+  const [alerts, setAlerts] = useState<AlertRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [health, setHealth] = useState<"checking" | "online" | "offline">("checking");
   const [search, setSearch] = useState("");
@@ -46,9 +48,9 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const [status, page, history] = await Promise.all([api.health(), api.events({ search: search.trim(), severity }), api.scans()]);
+      const [status, page, history, alertPage] = await Promise.all([api.health(), api.events({ search: search.trim(), severity }), api.scans(), api.alerts()]);
       setHealth(status.status === "ok" ? "online" : "offline");
-      setEvents(page.items); setTotal(page.total); setScans(history.items); setError("");
+      setEvents(page.items); setTotal(page.total); setScans(history.items); setAlerts(alertPage.items); setError("");
     } catch (err) {
       setHealth("offline");
       setError(err instanceof Error ? err.message : "Unable to reach the local SENTINEL API.");
@@ -104,6 +106,16 @@ export default function App() {
     } finally { setBusy(false); }
   }
 
+  async function changeAlertStatus(id: string, status: "acknowledged" | "resolved") {
+    try {
+      await api.updateAlert(id, status);
+      const result = await api.alerts();
+      setAlerts(result.items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update alert status.");
+    }
+  }
+
   async function addSample() {
     setBusy(true);
     try {
@@ -148,6 +160,7 @@ export default function App() {
 
         {view === "overview" && <Overview events={events} total={total} counts={counts} scans={scans} busy={busy} health={health} onNavigate={setView} onStart={startScan} onAddSample={addSample} />}
         {view === "events" && <EventsView events={events} total={total} search={search} severity={severity} setSearch={setSearch} setSeverity={setSeverity} onRefresh={() => void refresh()} />}
+        {view === "alerts" && <AlertsView alerts={alerts} onChangeStatus={changeAlertStatus} onRefresh={() => void refresh()} />}
         {view === "host" && <HostView scan={activeScan?.scan_type === "system" ? activeScan : scans.find((scan) => scan.scan_type === "system") ?? null} scans={scans} busy={busy} onStart={() => void startScan("system")} />}
         {view === "network" && <NetworkView networks={networks} selected={selectedNetwork} setSelected={setSelectedNetwork} scan={activeScan?.scan_type === "network" ? activeScan : scans.find((scan) => scan.scan_type === "network") ?? null} scans={scans} busy={busy} onStart={() => void startScan("network")} onReload={() => void loadNetworks()} />}
         <footer className="footer"><span>L1337XI SENTINEL</span><span>LOCAL-FIRST SECURITY OPERATIONS</span><span>EARLY ACCESS BUILD</span></footer>
@@ -213,6 +226,34 @@ function Overview({ events, total, counts, scans, busy, health, onNavigate, onSt
         <div className="panel-title"><div><div className="eyebrow">ACTIVITY</div><h2>Latest scan</h2></div><span className="live-label">LOCAL</span></div>
         {latest ? <div className="latest-scan"><div className="latest-type">{latest.scan_type === "system" ? "HOST ASSESSMENT" : "NETWORK DISCOVERY"}</div><strong>{latest.target}</strong><div className="scan-state-row"><span className={`scan-state ${latest.status}`}>{statusLabel(latest.status)}</span><time>{formatDate(latest.started_at)}</time></div><button className="text-action" onClick={() => onNavigate(latest.scan_type === "system" ? "host" : "network")}>OPEN RESULTS ↗</button></div> : <div className="empty-state compact">No scan jobs recorded.<br />Start an assessment to see results here.</div>}
       </div>
+    </section>
+  </>;
+}
+
+function AlertsView({ alerts, onChangeStatus, onRefresh }: {
+  alerts: AlertRecord[];
+  onChangeStatus: (id: string, status: "acknowledged" | "resolved") => void;
+  onRefresh: () => void;
+}) {
+  const openCount = alerts.filter((alert) => alert.status === "open").length;
+  const acknowledgedCount = alerts.filter((alert) => alert.status === "acknowledged").length;
+  return <>
+    <PageHeading eyebrow="DETECTION / ALERT MANAGEMENT" title="Detection alerts" description="Review rule matches generated from ingested security events.">
+      <ActionButton secondary onClick={onRefresh}>↻ Refresh alerts</ActionButton>
+    </PageHeading>
+    <section className="summary-grid alert-summary">
+      <article className="summary-card"><div className="card-kicker">OPEN ALERTS</div><div className="summary-value crimson">{openCount}</div><div className="summary-foot">Require triage</div></article>
+      <article className="summary-card"><div className="card-kicker">ACKNOWLEDGED</div><div className="summary-value">{acknowledgedCount}</div><div className="summary-foot">Under investigation</div></article>
+      <article className="summary-card"><div className="card-kicker">TOTAL MATCHES</div><div className="summary-value">{alerts.length}</div><div className="summary-foot">Latest 50 alerts</div></article>
+    </section>
+    <section className="panel full-panel">
+      <div className="panel-title"><div><div className="eyebrow">RULE ENGINE / MATCHES</div><h2>Alert queue</h2></div><span className="section-note">DETERMINISTIC RULES</span></div>
+      {alerts.length === 0 ? <div className="empty-state">No detection alerts yet. Ingest an event matching an enabled rule to populate this queue.</div> :
+        <div className="alert-list">{alerts.map((alert) => <article className="alert-row" key={alert.id}>
+          <div className="alert-main"><div className="alert-meta"><span className={`severity-badge ${alert.severity}`}>{alert.severity}</span><span className={`alert-status ${alert.status}`}>{alert.status}</span><span className="alert-rule">{alert.rule_id}</span></div><h3>{alert.title}</h3><p>{alert.description}</p><small>Event {alert.event_id.slice(0, 8)} · Created {formatDate(alert.created_at)}</small></div>
+          <div className="alert-actions">{alert.status === "open" && <button className="button button-secondary" onClick={() => onChangeStatus(alert.id, "acknowledged")}>Acknowledge</button>}{alert.status !== "resolved" && <button className="button button-secondary" onClick={() => onChangeStatus(alert.id, "resolved")}>Resolve</button>}</div>
+        </article>)}</div>}
+      <div className="panel-bottom"><span>Rule matches are stored locally and linked to their source event.</span><span>ALERTS / SQLITE</span></div>
     </section>
   </>;
 }
