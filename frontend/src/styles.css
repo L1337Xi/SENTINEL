@@ -139,3 +139,23 @@ body{background:radial-gradient(ellipse at 78% 0%,rgba(30,83,49,.16),transparent
 .flow-arrow{display:flex;align-items:center;color:#8abf96;font-size:20px;flex:0 0 auto}
 .hash-line{display:block;margin-top:6px;color:#83958a;font:10px var(--mono);overflow-wrap:anywhere}
 .capability-report .scope-note{margin-top:10px}
+
+
+/* Assessment report charts */
+.finding-analytics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:16px 0 18px}
+.finding-chart-card{min-width:0;padding:17px 18px;border:1px solid #304536;border-radius:5px;background:linear-gradient(150deg,#151f18,#101612)}
+.finding-chart-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:17px}
+.finding-chart-head .eyebrow{display:block;margin-bottom:6px}
+.finding-chart-head h3{margin:0;color:#eef4ef;font-size:14px;font-weight:600}
+.finding-chart-head>strong{color:#e5eee7;font:600 21px var(--mono);text-align:right}
+.finding-chart-head>strong small{display:block;color:#819187;font:8px var(--mono);letter-spacing:.12em}
+.severity-chart-row,.category-chart-row{display:grid;grid-template-columns:76px minmax(40px,1fr) 24px;align-items:center;gap:10px;margin:12px 0}
+.severity-chart-row>strong,.category-chart-row>strong{color:#dce7de;text-align:right;font:11px var(--mono)}
+.severity-chart-row .severity-badge{justify-self:start;min-width:62px;text-align:center}
+.category-chart-row>span{overflow:hidden;color:#aab8ad;font-size:10px;text-overflow:ellipsis;text-transform:capitalize;white-space:nowrap}
+.chart-track{height:8px;overflow:hidden;border:1px solid #293b30;border-radius:2px;background:#0b120d}
+.chart-fill{height:100%;min-width:0;border-radius:1px;transition:width .35s ease}
+.chart-fill.critical{background:#d94e60}.chart-fill.high{background:#b94b55}.chart-fill.medium{background:#b58a45}.chart-fill.low{background:#638e70}.chart-fill.category{background:linear-gradient(90deg,#286641,#76b58a)}
+.chart-footnote{margin-top:15px;padding-top:11px;border-top:1px solid #26372c;color:#819187;font-size:9px;line-height:1.6}
+.chart-empty{padding:18px 0;color:#819187;font-size:11px}
+@media(max-width:900px){.finding-analytics{grid-template-columns:1fr}}
