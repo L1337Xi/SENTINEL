@@ -50,7 +50,9 @@ To provide local SHA-256 indicators, create a JSON file such as `/etc/sentinel/h
 }
 ```
 
-Only valid 64-character hexadecimal SHA-256 keys are loaded. No remote threat-intelligence feed or built-in malware database is included. ClamAV uses its already-installed local signatures; SENTINEL does not install ClamAV or update signatures. Static script-pattern matches are low-confidence leads, not proof of malicious execution. Suspicious files are never executed, modified, quarantined or uploaded. The dashboard can export the assessment as JSON.
+Only valid 64-character hexadecimal SHA-256 keys are loaded. An optional MalwareBazaar Community API integration can also compare scanned SHA-256 hashes against its latest 100 additions. Obtain an API key from [abuse.ch](https://auth.abuse.ch/) and set it only in the local backend process environment as `SENTINEL_MALWAREBAZAAR_API_KEY`. Never put the key in source code, Git, screenshots, or chat. The integration sends only an API feed request; SENTINEL does not upload file contents or download malware samples. If the key is absent or the service is unreachable, local scanning continues and the report shows the feed status. The latest-100 feed is a limited threat-intelligence source, not a complete malware database; no match does not mean a file is safe.
+
+ClamAV uses its already-installed local signatures; SENTINEL does not install ClamAV or update signatures. Static script-pattern matches are low-confidence leads, not proof of malicious execution. Suspicious files are never executed, modified, quarantined or uploaded. The dashboard can export the assessment as JSON.
 
 
 ## Capability status
