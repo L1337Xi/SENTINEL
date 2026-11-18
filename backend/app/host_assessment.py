@@ -531,7 +531,7 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
             "Directories such as /proc, /sys, /dev, /run, caches and dependency trees are excluded.",
             "Static script patterns are leads, not proof of execution or malicious intent.",
             "A full filesystem scan may be truncated by the configured file-count or time budget.",
-            "No files were executed, modified, quarantined, or uploaded.",
             "CIRCL receives only the bounded SHA-256 lookup values; local file paths and file contents are not transmitted.",
+            "No files were executed, modified, quarantined, or uploaded.",
         ],
     }
