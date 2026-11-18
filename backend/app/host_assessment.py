@@ -18,7 +18,7 @@ import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 DEFAULT_EXCLUDES = {
     "/proc", "/sys", "/dev", "/run", "/var/cache", "/var/tmp",
@@ -283,7 +283,8 @@ def _security_posture() -> dict[str, Any]:
 
 def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
                         max_file_bytes: int = MAX_FILE_BYTES,
-                        max_seconds: int = MAX_SECONDS) -> dict[str, Any]:
+                        max_seconds: int = MAX_SECONDS,
+                        progress_callback: Callable[[dict[str, Any]], None] | None = None) -> dict[str, Any]:
     """Hash eligible regular files under root and perform bounded read-only checks."""
     started = time.monotonic()
     root_path = Path(root).resolve()
@@ -297,7 +298,28 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
     skipped_unreadable = 0
     truncated = False
     excluded = {str(root_path / item.lstrip("/")) for item in DEFAULT_EXCLUDES}
+    last_progress_at = 0.0
 
+    def report_progress(phase: str, current_path: str | None = None, *, force: bool = False) -> None:
+        nonlocal last_progress_at
+        if progress_callback is None:
+            return
+        elapsed = time.monotonic() - started
+        if not force and files_seen % 100 != 0 and elapsed - last_progress_at < 0.75:
+            return
+        last_progress_at = elapsed
+        progress_callback({
+            "phase": phase, "current_path": current_path,
+            "files_seen": files_seen, "files_hashed": files_hashed,
+            "bytes_hashed": bytes_hashed,
+            "malware_matches": sum(1 for item in findings if item.get("category") == "malware"),
+            "script_indicators": len(capabilities),
+            "elapsed_seconds": round(elapsed, 1),
+            "time_budget_seconds": max_seconds,
+            "time_budget_remaining": round(max(0.0, max_seconds - elapsed), 1),
+        })
+
+    report_progress("filesystem", str(root_path), force=True)
     for current, dirs, files in os.walk(root_path, topdown=True, followlinks=False):
         current_path = Path(current)
         dirs[:] = [
@@ -313,6 +335,7 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
                 break
             path = current_path / name
             files_seen += 1
+            report_progress("filesystem", str(path))
             try:
                 info = path.lstat()
                 if not stat.S_ISREG(info.st_mode) or info.st_size > max_file_bytes:
@@ -354,8 +377,10 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
         if truncated:
             break
 
+    report_progress("clamav", None, force=True)
     clamav = _clamav_scan(root_path)
     findings.extend(clamav["findings"])
+    report_progress("configuration", None, force=True)
     posture = _security_posture()
     persistence = _persistence_inventory()
     accounts = _privileged_account_inventory()
@@ -366,6 +391,7 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
         "source": "local_security_configuration",
     } for check in posture["checks"] if check["severity"] in {"medium", "high"})
 
+    report_progress("completed", None, force=True)
     return {
         "engine": "SENTINEL local read-only host assessment",
         "started_at": datetime.fromtimestamp(time.time() - (time.monotonic() - started), UTC).isoformat(),
