@@ -6,7 +6,18 @@ SENTINEL is a self-hosted security operations platform under active development.
 
 > **Development status:** Early foundation release. The current implementation contains a FastAPI service, SQLite-backed event ingestion and retrieval, and an initial React/TypeScript dashboard. Detection engineering, correlation, case management, forensic workflows, network analysis, and reporting are planned work, not shipped capabilities. This is not yet a production SIEM, EDR, or incident-response platform.
 
-## Product editions\n\nSENTINEL is being developed as two editions on one shared codebase:\n\n- **SENTINEL Normal:** the community-oriented foundation for local host assessment, local threat intelligence, scoped network discovery, events, alerts and investigations.\n- **SENTINEL Advanced:** the planned commercial edition, extending the shared core with continuous monitoring, deeper process and memory analysis, behaviour detections, sandbox workflows, ransomware protection controls and multi-device management.\n\nThe backend defaults to Normal. Set `SENTINEL_EDITION=advanced` in the local backend environment to preview the Advanced edition label and capability catalogue. This setting is a development/deployment mode only: it is **not** licence validation, authentication, a paywall or proof that planned Advanced capabilities are implemented. The `/api/edition` endpoint reports each capability as `available` or `planned`.\n\nThe current repository still carries its existing proprietary licence. The Normal open-source licence and separate Advanced commercial licence have not yet been applied; those terms must be selected and documented before public redistribution or sale.\n\n## Design objectives
+## Product editions
+
+SENTINEL is being developed as two editions on one shared codebase:
+
+- **SENTINEL Normal:** the community-oriented foundation for local host assessment, local threat intelligence, scoped network discovery, events, alerts and investigations.
+- **SENTINEL Advanced:** the planned commercial edition, extending the shared core with continuous monitoring, deeper process and memory analysis, behaviour detections, sandbox workflows, ransomware protection controls and multi-device management.
+
+The backend defaults to Normal. Set `SENTINEL_EDITION=advanced` in the local backend environment to preview the Advanced edition label and capability catalogue. This setting is a development/deployment mode only: it is **not** licence validation, authentication, a paywall or proof that planned Advanced capabilities are implemented. The `/api/edition` endpoint reports each capability as `available` or `planned`.
+
+The current repository still carries its existing proprietary licence. The Normal open-source licence and separate Advanced commercial licence have not yet been applied; those terms must be selected and documented before public redistribution or sale.
+
+## Design objectives
 
 - **Local-first operation:** services bind to loopback by default.
 - **Clear boundaries:** ingestion, normalization, detection, correlation, investigation, and reporting remain separate concerns.
