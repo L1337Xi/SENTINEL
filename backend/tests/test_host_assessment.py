@@ -353,3 +353,30 @@ def test_stale_malwarebazaar_feed_remains_identified_as_stale():
     assert len(matches) == 1
     assert matches[0]["feed_status"] == "stale"
     assert matches[0]["feed_cached"] is True
+
+
+
+def test_host_assessment_reports_circl_context_separately_from_malware(tmp_path, monkeypatch):
+    sample = tmp_path / "known-file.bin"
+    sample.write_bytes(b"known file fixture")
+    digest = hashlib.sha256(sample.read_bytes()).hexdigest()
+    monkeypatch.setenv("SENTINEL_HASH_DB", str(tmp_path / "missing.json"))
+    monkeypatch.setattr(host_assessment, "fetch_recent_malware", lambda: {"status": "not_configured"})
+    monkeypatch.setattr(host_assessment, "lookup_circl_hashes", lambda hashes: {
+        "provider": "CIRCL hashlookup",
+        "status": "ok",
+        "known_file_matches": 1,
+        "lookups_performed": 1,
+        "cache_hits": 0,
+        "matches": [{"sha256": digest, "paths": [str(sample)], "file_name": "known-file.bin"}],
+    })
+    monkeypatch.setattr(host_assessment, "_security_posture", lambda: {"checks": [], "firewall_tools": []})
+    monkeypatch.setattr(host_assessment, "_clamav_scan", lambda root, **kwargs: {
+        "available": False, "executed": False, "findings": [], "note": "mocked"
+    })
+
+    result = host_assessment.run_host_assessment(str(tmp_path), max_files=20, max_seconds=5)
+
+    assert result["threat_intelligence"]["circl_hashlookup"]["known_file_matches"] == 1
+    assert result["threat_intelligence"]["known_file_context"][0]["sha256"] == digest
+    assert not any(item.get("source") == "circl_hashlookup" for item in result["findings"])
