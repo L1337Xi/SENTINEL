@@ -135,7 +135,6 @@ export default function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <button className="wordmark" onClick={() => setView("overview")} aria-label="SENTINEL home">
-          <span className="wordmark-symbol"><i /><i /><i /></span>
           <span><strong>SENTINEL</strong><small>SECURITY OPERATIONS</small></span>
         </button>
         <div className="side-caption">CONSOLE</div>
