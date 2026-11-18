@@ -335,6 +335,9 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
   const assessmentSummary = asObject(assessment.summary);
   const findings = asArray<Record<string, unknown>>(assessment.findings);
   const capabilities = asArray<Record<string, unknown>>(assessment.script_capabilities);
+  const malwareFindings = findings.filter((finding) => finding.category === "malware");
+  const malwareEngines = asObject(assessment.malware_engines);
+  const clamav = asObject(malwareEngines.clamav);
 
   const processRows = processes.map((item) => (
     <div className="simple-row" key={String(item.pid)}>
@@ -383,14 +386,34 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
             <Resource label="MALWARE MATCHES" value={String(assessmentSummary.malware_matches ?? 0)} detail="Exact local SHA-256 indicators" />
             <Resource label="CONFIG FINDINGS" value={String(assessmentSummary.configuration_findings ?? 0)} detail="Review required; not all are vulnerabilities" />
             <Resource label="SCAN STATUS" value={assessmentSummary.truncated ? "LIMIT REACHED" : "COMPLETED"} detail={assessmentSummary.truncated ? "File or time budget reached" : "Configured scan scope completed"} />
+            <Resource label="CLAMAV ENGINE" value={clamav.executed ? "EXECUTED" : clamav.available ? "AVAILABLE" : "NOT INSTALLED"} detail={String(clamav.version ?? clamav.note ?? "No local engine detected")} />
           </div>
           <div className="simple-table">
             {findings.length === 0 ? <div className="empty-state">No configured hash matches or flagged configuration items were found in the scanned scope. This is not a guarantee that the host is clean.</div> :
               findings.map((finding, index) => <article className="simple-row" key={String(finding.id ?? index)} style={{gridTemplateColumns:"auto 1fr", alignItems:"start"}}>
                 <span className={`severity-badge ${String(finding.severity ?? "low")}`}>{String(finding.severity ?? "info").toUpperCase()}</span>
-                <div><strong>{String(finding.title ?? "Assessment finding")}</strong><small>{String(finding.category ?? "finding")} · {String(finding.path ?? finding.evidence ?? "Local configuration")}</small><p>{String(finding.description ?? "Review the evidence before taking action.")}</p>{finding.sha256 && <small>SHA-256: {String(finding.sha256)}</small>}</div>
+                <div><strong>{String(finding.title ?? "Assessment finding")}</strong><small>{String(finding.category ?? "finding")} · {String(finding.path ?? finding.evidence ?? "Local configuration")}</small><p>{String(finding.description ?? "Review the evidence before taking action.")}</p>{typeof finding.sha256 === "string" && <small>SHA-256: {finding.sha256}</small>}</div>
               </article>)}
           </div>
+          {malwareFindings.length > 0 && <div className="result-section">
+            <div className="result-heading"><h3>Malware capability analysis</h3><span>STATIC EVIDENCE ONLY</span></div>
+            {malwareFindings.map((finding, index) => {
+              const mapped = asArray<Record<string, unknown>>(finding.capabilities);
+              const inferred = capabilities.filter((item) => item.path === finding.path);
+              const labels = [...mapped, ...inferred];
+              return <div className="capability-report" key={String(finding.id ?? index)}>
+                <div className="capability-flow">
+                  <div className="flow-node"><small>FILE / SAMPLE</small><strong>{String(finding.title ?? "Detected file")}</strong><span>{String(finding.path ?? "Path unavailable")}</span></div>
+                  <span className="flow-arrow">→</span>
+                  <div className="flow-node"><small>DETECTION</small><strong>{String(finding.source ?? "Local detection")}</strong><span>{String(finding.confidence ?? "unknown")} confidence</span></div>
+                  <span className="flow-arrow">→</span>
+                  <div className="flow-node"><small>CAPABILITY EVIDENCE</small><strong>{labels.length ? labels.map((item) => String(item.label ?? item.id ?? "Indicator")).join(", ") : "Not established"}</strong><span>{labels.length ? "Static indicators; not runtime proof" : "No capability metadata available for this detection"}</span></div>
+                </div>
+                {typeof finding.sha256 === "string" && <small className="hash-line">SHA-256 · {finding.sha256}</small>}
+              </div>;
+            })}
+            <div className="scope-note"><span className="scope-mark">i</span><p>Flow nodes distinguish a detection from its possible capabilities. Capabilities come only from local indicator metadata or low-confidence script-pattern matches; SENTINEL does not execute malware, so runtime behaviour is not verified.</p></div>
+          </div>}
           {capabilities.length > 0 && <div className="result-section">
             <div className="result-heading"><h3>Static capability indicators</h3><span>INFERRED FROM SCRIPT TEXT · LOW CONFIDENCE</span></div>
             <div className="simple-table">{capabilities.map((item, index) => <div className="simple-row" key={String(item.path) + String(item.id) + index} style={{gridTemplateColumns:"1fr 1fr"}}>
