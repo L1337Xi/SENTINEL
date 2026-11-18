@@ -32,7 +32,7 @@ CAPABILITY_PATTERNS = {
     "network_communication": (r"curl\s|wget\s|urllib|requests\.|socket\.|http[s]?://", "Network communication"),
     "persistence": (r"crontab|systemctl\s+enable|\.config/autostart|/etc/cron|authorized_keys", "Persistence modification"),
     "credential_access": (r"/etc/shadow|/etc/passwd|credential|password|keyring|\.ssh/", "Credential or key access"),
-    "command_execution": (r"subprocess\.|os\.system|exec\(|popen\(|bash\s+-c|sh\s+-c", "Command execution"),
+    "command_execution": (r"subprocess\.|os\.system|exec\(|popen\(|bash\s+-c|sh\s+-c|\|\s*(bash|sh)\b", "Command execution"),
     "destructive_actions": (r"rm\s+-rf|mkfs\.|shred\s|dd\s+if=|wipefs", "Potential destructive file or disk action"),
     "privilege_escalation": (r"sudo\s|setuid|chmod\s+[47]|/etc/sudoers", "Privilege or permission modification"),
 }
