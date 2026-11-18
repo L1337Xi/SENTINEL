@@ -199,3 +199,23 @@ body{background:radial-gradient(ellipse at 78% 0%,rgba(30,83,49,.16),transparent
 .live-current{min-width:0;padding:12px 13px;border:1px solid #304536;border-radius:4px;background:#0e1510}
 .live-current code{display:block;margin-top:7px;color:#b7d0bd;font:11px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
 @media(prefers-reduced-motion:reduce){.live-progress-indicator{animation:none;width:55%}}
+
+
+/* Host assessment history controls */
+.host-history{margin:20px 0 6px;padding:16px 0 8px;border-top:1px solid #26372c}
+.host-history>.result-heading{align-items:center}
+.host-history>.result-heading>div{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.host-history>.result-heading h3{margin:0;color:#e5eee7;font-size:13px}
+.host-history>.result-heading span{color:#829187;font:8px var(--mono);letter-spacing:.12em}
+.host-history-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 8px;border-top:1px solid #202e24}
+.host-history-info{display:flex;min-width:0;flex-direction:column;gap:4px}
+.host-history-info strong{overflow-wrap:anywhere;color:#dce7de;font-size:11px;font-weight:500}
+.host-history-info small{color:#829187;font-size:9px}
+.history-protected{flex:0 0 auto;color:#d0aa68;font:9px var(--mono);letter-spacing:.1em}
+.history-delete{flex:0 0 auto;color:#df7882}
+.history-delete:hover{color:#ff9ca5}
+.button-danger{border-color:#71333b;background:#251519;color:#e99aa2}
+.button-danger:hover:not(:disabled){border-color:#a44854;background:#35191f;color:#ffdce0}
+.button-danger:disabled{opacity:.4;cursor:not-allowed}
+.history-note{margin:12px 0 0;color:#78877d;font-size:9px;line-height:1.6}
+@media(max-width:680px){.host-history>.result-heading{align-items:flex-start;flex-direction:column}.host-history-row{align-items:flex-start}.history-delete{padding:7px 0}}
