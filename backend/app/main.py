@@ -6,9 +6,9 @@ import sqlite3
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import psutil
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-import psutil
 
 from .config import CORS_ORIGINS, MAX_PAGE_SIZE
 from .database import (
