@@ -189,3 +189,12 @@ body{background:radial-gradient(ellipse at 78% 0%,rgba(30,83,49,.16),transparent
 /* Product edition indicator */
 .edition-chip{display:inline-flex;align-items:center;padding:5px 8px;border:1px solid #355744;border-radius:3px;color:#a8c9ae;background:#142019;font:9px var(--mono);letter-spacing:.08em;white-space:nowrap}.edition-chip.advanced{border-color:#7c6040;color:#e2bd83;background:#211b13}
 @media(max-width:680px){.edition-chip{display:none}}
+
+
+/* Live assessment activity indicator */
+.live-progress-track{position:relative;height:7px;margin:16px 0 14px;overflow:hidden;border:1px solid #304536;border-radius:3px;background:#0b120d}
+.live-progress-indicator{position:absolute;top:0;bottom:0;left:0;width:34%;border-radius:2px;background:linear-gradient(90deg,#286641,#76b58a);animation:sentinel-scan-progress 1.45s ease-in-out infinite alternate}
+@keyframes sentinel-scan-progress{from{transform:translateX(0);width:22%}to{transform:translateX(260%);width:38%}}
+.live-current{min-width:0;padding:12px 13px;border:1px solid #304536;border-radius:4px;background:#0e1510}
+.live-current code{display:block;margin-top:7px;color:#b7d0bd;font:11px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+@media(prefers-reduced-motion:reduce){.live-progress-indicator{animation:none;width:55%}}
