@@ -219,3 +219,9 @@ body{background:radial-gradient(ellipse at 78% 0%,rgba(30,83,49,.16),transparent
 .button-danger:disabled{opacity:.4;cursor:not-allowed}
 .history-note{margin:12px 0 0;color:#78877d;font-size:9px;line-height:1.6}
 @media(max-width:680px){.host-history>.result-heading{align-items:flex-start;flex-direction:column}.host-history-row{align-items:flex-start}.history-delete{padding:7px 0}}
+
+
+/* Evidence-led finding response controls */
+.finding-response-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:13px;padding-top:12px;border-top:1px solid #26372c}
+.finding-response-actions .history-protected{white-space:normal}
+.finding-response-actions button:disabled{opacity:.4;cursor:not-allowed}
