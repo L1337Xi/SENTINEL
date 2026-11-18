@@ -43,6 +43,8 @@ export const api = {
     request<SecurityEvent>("/api/events", { method: "POST", body: JSON.stringify({ ...event, occurred_at: new Date().toISOString() }) }),
   scans: () => request<{ items: ScanRecord[] }>("/api/scans"),
   scan: (id: string) => request<ScanRecord>(`/api/scans/${encodeURIComponent(id)}`),
+  deleteScan: (id: string) => request<{ id: string; deleted: boolean }>(`/api/scans/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  clearHostScanHistory: () => request<{ deleted: number; message: string }>("/api/scans/system", { method: "DELETE" }),
   networks: () => request<{ items: NetworkInterface[] }>("/api/scanner/networks"),
   startSystemScan: () => request<{ id: string; status: string }>("/api/scans/system", { method: "POST" }),
   startNetworkScan: (network: string) => request<{ id: string; status: string }>("/api/scans/network", { method: "POST", body: JSON.stringify({ network }) }),
