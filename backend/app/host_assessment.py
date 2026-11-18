@@ -6,11 +6,11 @@ JSON file; no remote threat-intelligence feed is assumed.
 """
 from __future__ import annotations
 
+import grp
 import hashlib
 import json
 import os
 import pwd
-import grp
 import re
 import shutil
 import stat
