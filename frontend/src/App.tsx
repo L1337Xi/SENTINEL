@@ -460,7 +460,7 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
     <PageHeading eyebrow="ASSESSMENT / LOCAL HOST" title="Host assessment" description="Read-only inventory of the machine running the SENTINEL backend.">
       <ActionButton onClick={onStart} disabled={busy}>↻ Run assessment</ActionButton>
     </PageHeading>
-    <div className="scope-note host-scope"><span className="scope-mark">i</span><p>This performs a bounded, read-only local assessment: host inventory, SHA-256 file hashing against local indicators and optional MalwareBazaar/CIRCL hash intelligence, static script-pattern review and selected security-configuration checks. CIRCL lookups send only SHA-256 hashes; the MalwareBazaar integration retrieves feed metadata. File contents and local paths are never uploaded. Suspicious files are never executed, changed or quarantined. File-count, size and time limits apply; a clean result does not prove the system is malware-free.</p></div>
+    <div className="scope-note host-scope"><span className="scope-mark">i</span><p>This performs a bounded, read-only local assessment: host inventory, SHA-256 file hashing against local indicators and optional MalwareBazaar/CIRCL hash intelligence, static script-pattern review and selected security-configuration checks. CIRCL lookups send only SHA-256 hashes; the MalwareBazaar integration retrieves feed metadata. File contents and local paths are never uploaded. The assessment itself is read-only. Investigation adds package and file evidence; quarantine or deletion are separate, explicit response actions with safeguards. File-count, size and time limits apply; a clean result does not prove the system is malware-free.</p></div>
     <section className="panel full-panel scan-panel"><div className="panel-title"><div><div className="eyebrow">ASSESSMENT STATUS</div><h2>Latest host inventory</h2></div><span className="section-note">{hostScans.length} TOTAL RUNS</span></div><ScanHeader scan={scan} />
       <section className="host-history" aria-label="Previous host assessment results">
         <div className="result-heading"><div><h3>Previous scan history</h3><span>{hostScans.length} SAVED RESULTS</span></div>
@@ -480,7 +480,7 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
         <div className="result-heading"><h3>Live assessment activity</h3><span className="scan-state running">{progressPhase.toUpperCase()}</span></div>
         <div className="resource-grid">
           <Resource label="FILES VISITED" value={String(liveProgress.files_seen ?? 0)} detail={`${String(liveProgress.files_hashed ?? 0)} successfully hashed`} />
-          <Resource label="MALWARE MATCHES" value={String(liveProgress.malware_matches ?? 0)} detail="Local hash matches so far · ClamAV reports after its pass" />
+          <Resource label="MALWARE DETECTIONS" value={String(liveProgress.malware_matches ?? 0)} detail="Local hash matches so far · ClamAV reports after its pass" />
           <Resource label="SCRIPT INDICATORS" value={String(liveProgress.script_indicators ?? 0)} detail="Static indicators; not confirmed malware" />
           <Resource label="ELAPSED" value={`${Number(liveProgress.elapsed_seconds ?? 0).toFixed(1)} s`} detail={`Filesystem budget remaining: ${Number(liveProgress.time_budget_remaining ?? 180).toFixed(1)} s`} />
         </div>
@@ -521,7 +521,7 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
           <div className="result-heading"><h3>Security assessment report</h3><button className="button button-secondary" onClick={() => downloadJson(`sentinel-host-report-${scan?.id ?? "latest"}.json`, { scan, security_assessment: assessment })}>Export JSON report ↓</button></div>
           <div className="resource-grid">
             <Resource label="FILES HASHED" value={String(assessmentSummary.files_hashed ?? 0)} detail={`${String(assessmentSummary.files_seen ?? 0)} files visited`} />
-            <Resource label="MALWARE MATCHES" value={String(assessmentSummary.malware_matches ?? 0)} detail="Exact local and MalwareBazaar hash matches" />
+            <Resource label="MALWARE DETECTIONS" value={String(assessmentSummary.malware_matches ?? 0)} detail="Exact local and MalwareBazaar hash matches" />
             <Resource label="CONFIG FINDINGS" value={String(assessmentSummary.configuration_findings ?? 0)} detail="Review required; not all are vulnerabilities" />
             <Resource label="SCAN STATUS" value={assessmentSummary.truncated ? "LIMIT REACHED" : "COMPLETED"} detail={assessmentSummary.truncated ? "File or time budget reached" : "Configured scan scope completed"} />
             <Resource label="CLAMAV ENGINE" value={clamav.executed ? "EXECUTED" : clamav.available ? "AVAILABLE" : "NOT INSTALLED"} detail={String(clamav.version ?? clamav.note ?? "No local engine detected")} />
@@ -572,7 +572,7 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
                 <div className="capability-flow">
                   <div className="flow-node"><small>FILE / SAMPLE</small><strong>{String(finding.title ?? "Detected file")}</strong><span>{String(finding.path ?? "Path unavailable")}</span></div>
                   <span className="flow-arrow">→</span>
-                  <div className="flow-node"><small>DETECTION</small><strong>{String(finding.source ?? "Local detection")}</strong><span>{String(finding.confidence ?? "unknown")} confidence</span></div>
+                  <div className="flow-node"><small>DETECTION</small><strong>{String(finding.source ?? "Local detection")}</strong><span>{String(finding.confidence ?? "unknown")} detection confidence · {String(finding.assessment ?? "not_assessed").replace(/_/g, " ")}</span></div>
                   <span className="flow-arrow">→</span>
                   <div className="flow-node"><small>CAPABILITY EVIDENCE</small><strong>{labels.length ? labels.map((item) => String(item.label ?? item.id ?? "Indicator")).join(", ") : "Not established"}</strong><span>{labels.length ? "Static indicators; not runtime proof" : "No capability metadata available for this detection"}</span></div>
                 </div>
