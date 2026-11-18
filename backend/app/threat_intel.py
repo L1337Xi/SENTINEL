@@ -102,7 +102,7 @@ def fetch_recent_malware(*, force_refresh: bool = False) -> dict:
     except (HTTPError, URLError, TimeoutError, OSError, UnicodeError, json.JSONDecodeError):
         return _stale_or_error(cached, "request_failed")
 
-    if not isinstance(payload, dict) or payload.get("query_status") not in {"ok", "no_results"}:
+    if not isinstance(payload, dict) or payload.get("query_status") not in ("ok", "no_results"):
         status = payload.get("query_status") if isinstance(payload, dict) else None
         return _stale_or_error(cached, str(status or "invalid_response")[:80])
 
