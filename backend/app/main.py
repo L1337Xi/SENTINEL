@@ -40,6 +40,7 @@ from .database import (
 from .database import get_case as fetch_case
 from .detections import RULES, evaluate_event
 from .evidence import router as evidence_router
+from .host_assessment import run_host_assessment
 from .scanner import network_discovery, system_inventory, validate_local_network
 from .schemas import (
     AlertUpdate,
@@ -158,6 +159,8 @@ def _execute_scan(scan_id: str, scan_type: str, target: str) -> None:
     update_scan(scan_id, status="running")
     try:
         result = system_inventory() if scan_type == "system" else network_discovery(target)
+        if scan_type == "system":
+            result["security_assessment"] = run_host_assessment()
         update_scan(scan_id, status="completed", result=result, completed_at=datetime.now(UTC).isoformat())
     except (OSError, RuntimeError, ValueError, TypeError, sqlite3.Error, psutil.Error) as exc:
         update_scan(scan_id, status="failed", error=str(exc)[:500], completed_at=datetime.now(UTC).isoformat())
