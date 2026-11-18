@@ -39,8 +39,8 @@ from .database import (
 )
 from .database import get_case as fetch_case
 from .detections import RULES, evaluate_event
-from .evidence import router as evidence_router
 from .editions import edition_manifest
+from .evidence import router as evidence_router
 from .host_assessment import run_host_assessment
 from .scanner import network_discovery, system_inventory, validate_local_network
 from .schemas import (
