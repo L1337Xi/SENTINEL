@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .threat_intel import fetch_recent_malware, match_recent_hashes
+from .threat_intel import fetch_recent_malware, lookup_circl_hashes, match_recent_hashes
 
 DEFAULT_EXCLUDES = {
     "/proc", "/sys", "/dev", "/run", "/var/cache", "/var/tmp",
@@ -466,6 +466,7 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
     report_progress("threat_intelligence", None, force=True)
     malwarebazaar = fetch_recent_malware()
     findings.extend(match_recent_hashes(scanned_hashes, malwarebazaar))
+    circl = lookup_circl_hashes(scanned_hashes)
 
     clamav_files_scanned = 0
     def report_clamav_progress(update: dict[str, Any]) -> None:
@@ -520,7 +521,9 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
             "local_indicators_loaded": len(indicators),
             "network_lookup": malwarebazaar.get("status") == "ok",
             "malwarebazaar": {key: value for key, value in malwarebazaar.items() if key != "entries"},
-            "note": "MalwareBazaar checks only its latest 100 additions. A feed match is an exact hash indicator; no match does not establish that a file is safe.",
+            "circl_hashlookup": {key: value for key, value in circl.items() if key != "matches"},
+            "known_file_context": circl.get("matches", []),
+            "note": "MalwareBazaar checks only its latest 100 additions. CIRCL hashlookup provides known-file context only, not a malware verdict. No match from either source establishes that a file is safe.",
         },
         "limitations": [
             f"Skipped files larger than {max_file_bytes} bytes: {skipped_large}",
