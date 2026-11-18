@@ -548,7 +548,7 @@ function AssessmentFindingCharts({ findings, capabilities }: { findings: Record<
         <div className="finding-chart-head"><div><span className="eyebrow">FILTERED EVIDENCE</span><h3>Assessment records</h3></div><strong>{filtered.length}<small> MATCHING</small></strong></div>
         <div className="active-filters">
           <span>{selectedSeverity === "all" ? "All severities" : selectedSeverity.toUpperCase()}</span>
-          <span>{selectedCategory === "all" ? "All categories" : selectedCategory}</span>
+          <label className="category-filter-label"><span className="sr-only">Filter by category</span><select aria-label="Filter assessment records by category" value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}><option value="all">All categories</option>{categoryCounts.map(([category]) => <option key={category} value={category}>{category}</option>)}</select></label>
           {(selectedSeverity !== "all" || selectedCategory !== "all") && <button onClick={() => { setSelectedSeverity("all"); setSelectedCategory("all"); }}>Clear filters</button>}
         </div>
         {filtered.length === 0 ? <div className="chart-empty">No records match these filters.</div> : filtered.map((record) => (
