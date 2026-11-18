@@ -12,6 +12,7 @@ export interface AlertRecord {
 export interface ScanRecord {
   id: string; scan_type: "system" | "network"; status: "queued" | "running" | "completed" | "failed";
   target: string; started_at: string; completed_at: string | null; result: Record<string, unknown> | null; error: string | null;
+  progress: Record<string, unknown> | null;
 }
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8787";
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
