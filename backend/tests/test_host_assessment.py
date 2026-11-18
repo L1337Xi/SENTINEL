@@ -201,3 +201,35 @@ def test_host_assessment_includes_remote_feed_match(tmp_path, monkeypatch):
     assert len(matches) == 1
     assert matches[0]["sha256"] == digest
     assert result["threat_intelligence"]["malwarebazaar"]["status"] == "ok"
+
+
+def test_clamav_streams_current_file_and_scan_count(tmp_path, monkeypatch):
+    import os
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(host_assessment.shutil, "which", lambda name: "/usr/bin/clamscan")
+    monkeypatch.setattr(host_assessment.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(stdout="ClamAV test version", returncode=0))
+    updates = []
+
+    class FakeProcess:
+        def __init__(self):
+            read_fd, write_fd = os.pipe()
+            os.write(write_fd, b"Scanning: /tmp/one.bin\n/tmp/one.bin: OK\n/tmp/two.bin: Eicar-Test-Signature FOUND\n")
+            os.close(write_fd)
+            self.stdout = os.fdopen(read_fd, "rb", buffering=0)
+
+        def poll(self):
+            return 0
+
+        def wait(self, timeout=None):
+            return 0
+
+    monkeypatch.setattr(host_assessment.subprocess, "Popen", lambda *args, **kwargs: FakeProcess())
+    result = host_assessment._clamav_scan(tmp_path, progress_callback=updates.append)
+
+    assert result["files_scanned"] == 2
+    assert result["current_path"] == "/tmp/two.bin"
+    assert len(result["findings"]) == 1
+    assert result["findings"][0]["path"] == "/tmp/two.bin"
+    assert any(item["current_path"] == "/tmp/one.bin" for item in updates)
+    assert updates[-1]["clamav_files_scanned"] == 2
