@@ -1,9 +1,8 @@
 import hashlib
 import json
 
-import pytest
-
 from app import host_assessment, threat_intel
+import pytest
 
 
 @pytest.fixture(autouse=True)
