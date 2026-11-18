@@ -93,7 +93,8 @@ def _protected_path(path: Path) -> bool:
 
 def quarantine_file(path_value: str, expected_sha256: str) -> dict[str, Any]:
     path = Path(path_value)
-    if not path.is_absolute(): raise ValueError("Finding path must be absolute.")
+    if not path.is_absolute():
+        raise ValueError("Finding path must be absolute.")
     if _protected_path(path):
         raise PermissionError("System and package configuration paths are protected from quarantine.")
     sha, md5, info = _hash(path)
@@ -103,17 +104,25 @@ def quarantine_file(path_value: str, expected_sha256: str) -> dict[str, Any]:
         raise PermissionError("Package-managed files are protected. Use the package manager.")
     if info.st_nlink > 1:
         raise PermissionError("Files with multiple hard links are protected.")
-    root = _root(); root.mkdir(parents=True, exist_ok=True, mode=0o700); os.chmod(root, 0o700)
-    item_id = str(uuid.uuid4()); stored = root / item_id; manifest = root / f"{item_id}.json"
-    shutil.copy2(path, stored); os.chmod(stored, 0o600)
+    root = _root()
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(root, 0o700)
+    item_id = str(uuid.uuid4())
+    stored = root / item_id
+    manifest = root / f"{item_id}.json"
+    shutil.copy2(path, stored)
+    os.chmod(stored, 0o600)
     if _hash(stored)[0] != sha:
-        stored.unlink(missing_ok=True); raise OSError("Quarantine verification failed; original preserved.")
+        stored.unlink(missing_ok=True)
+        raise OSError("Quarantine verification failed; original preserved.")
     record = {"id": item_id, "original_path": str(path), "sha256": sha,
               "size_bytes": info.st_size, "mode": stat.S_IMODE(info.st_mode),
               "uid": info.st_uid, "gid": info.st_gid,
               "quarantined_at": datetime.now(UTC).isoformat(), "status": "quarantined"}
-    temp = manifest.with_suffix(".tmp"); temp.write_text(json.dumps(record), encoding="utf-8")
-    os.chmod(temp, 0o600); os.replace(temp, manifest)
+    temp = manifest.with_suffix(".tmp")
+    temp.write_text(json.dumps(record), encoding="utf-8")
+    os.chmod(temp, 0o600)
+    os.replace(temp, manifest)
     path.unlink()
     return record
 
@@ -130,9 +139,12 @@ def list_quarantine() -> list[dict[str, Any]]:
     return records[:500]
 
 def restore_quarantined(item_id: str) -> dict[str, Any]:
-    normalized = str(uuid.UUID(item_id)); root = _root()
-    manifest = root / f"{normalized}.json"; record = json.loads(manifest.read_text(encoding="utf-8"))
-    stored, original = root / normalized, Path(record["original_path"])
+    normalized = str(uuid.UUID(item_id))
+    root = _root()
+    manifest = root / f"{normalized}.json"
+    record = json.loads(manifest.read_text(encoding="utf-8"))
+    stored = root / normalized
+    original = Path(record["original_path"])
     if original.exists() or original.is_symlink():
         raise FileExistsError("Original path exists; restore will not overwrite it.")
     if _hash(stored)[0] != record["sha256"]:
