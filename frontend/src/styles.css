@@ -184,3 +184,8 @@ body{background:radial-gradient(ellipse at 78% 0%,rgba(30,83,49,.16),transparent
 .finding-evidence-main p{margin:7px 0 0;color:#b2beb4;font-size:10px;line-height:1.6}
 .finding-evidence-source{color:#849489;font-size:9px;text-align:right}
 @media(max-width:680px){.finding-evidence-row{grid-template-columns:60px minmax(0,1fr)}.finding-evidence-source{grid-column:2;text-align:left}.finding-evidence-list{padding:13px}}
+
+
+/* Product edition indicator */
+.edition-chip{display:inline-flex;align-items:center;padding:5px 8px;border:1px solid #355744;border-radius:3px;color:#a8c9ae;background:#142019;font:9px var(--mono);letter-spacing:.08em;white-space:nowrap}.edition-chip.advanced{border-color:#7c6040;color:#e2bd83;background:#211b13}
+@media(max-width:680px){.edition-chip{display:none}}
