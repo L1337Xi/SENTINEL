@@ -120,3 +120,21 @@ def test_firewall_detection_recognizes_active_ufw(monkeypatch):
     result = host_assessment._security_posture()
     firewall = next(item for item in result["checks"] if item["id"] == "firewall")
     assert firewall["status"] == "enabled"
+
+def test_host_assessment_emits_live_progress(tmp_path, monkeypatch):
+    (tmp_path / "one.txt").write_text("safe fixture")
+    monkeypatch.setenv("SENTINEL_HASH_DB", str(tmp_path / "missing.json"))
+    monkeypatch.setattr(host_assessment, "_security_posture", lambda: {"checks": [], "firewall_tools": []})
+    monkeypatch.setattr(host_assessment, "_clamav_scan", lambda root: {"available": False, "executed": False, "findings": [], "note": "mocked"})
+    updates = []
+
+    result = host_assessment.run_host_assessment(
+        str(tmp_path), max_files=20, max_seconds=5, progress_callback=updates.append
+    )
+
+    assert updates
+    assert updates[0]["phase"] == "filesystem"
+    assert any(item["phase"] == "configuration" for item in updates)
+    assert updates[-1]["phase"] == "completed"
+    assert updates[-1]["files_seen"] == result["summary"]["files_seen"]
+    assert "time_budget_remaining" in updates[-1]
