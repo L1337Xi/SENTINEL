@@ -75,45 +75,119 @@ def _script_capabilities(path: Path) -> list[dict[str, str]]:
     return found
 
 
-def _clamav_scan(root: Path, timeout: int = 90) -> dict[str, Any]:
-    """Use an already-installed ClamAV scanner; never install or update signatures."""
+def _clamav_scan(root: Path, timeout: int = 90,
+                 progress_callback: Callable[[dict[str, Any]], None] | None = None) -> dict[str, Any]:
+    """Run installed ClamAV locally and stream per-file progress without buffering the scan."""
     executable = shutil.which("clamscan")
     if not executable:
         return {"available": False, "executed": False, "findings": [],
+                "files_scanned": 0, "current_path": None,
                 "note": "ClamAV is not installed; SENTINEL did not install it."}
+    version = None
+    process = None
+    detections: list[dict[str, Any]] = []
+    files_scanned = 0
+    current_path = None
+    started = time.monotonic()
     try:
-        version = subprocess.run([executable, "--version"], capture_output=True, text=True,
-                                 timeout=5, check=False).stdout.strip()[:200]
-        completed = subprocess.run(
-            [executable, "--recursive", "--infected", "--no-summary",
+        version_result = subprocess.run([executable, "--version"], capture_output=True, text=True,
+                                         timeout=5, check=False)
+        version = version_result.stdout.strip()[:200]
+        process = subprocess.Popen(
+            [executable, "--recursive", "--infected", "--no-summary", "--verbose",
              "--max-filesize=64M", "--max-scansize=2G",
              "--exclude-dir=^/(proc|sys|dev|run|var/cache|var/tmp)(/|$)", str(root)],
-            capture_output=True, text=True, timeout=timeout, check=False,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0,
         )
+        if process.stdout is None:
+            raise OSError("ClamAV output stream was not available")
+        import selectors
+        selector = selectors.DefaultSelector()
+        selector.register(process.stdout, selectors.EVENT_READ)
+        pending = b""
+        timed_out = False
+        while selector.get_map():
+            if time.monotonic() - started >= timeout:
+                timed_out = True
+                process.terminate()
+                break
+            ready = selector.select(timeout=0.2)
+            if not ready and process.poll() is not None:
+                break
+            for key, _ in ready:
+                chunk = os.read(key.fd, 65536)
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    continue
+                pending += chunk
+                while b"\n" in pending:
+                    raw_line, pending = pending.split(b"\n", 1)
+                    line = raw_line.decode(errors="replace").strip()
+                    if not line:
+                        continue
+                    if line.endswith(" FOUND"):
+                        file_path, signature = line.rsplit(": ", 1)
+                        detections.append({
+                            "id": f"clamav-{hashlib.sha256(line.encode()).hexdigest()[:12]}",
+                            "category": "malware", "severity": "high",
+                            "title": signature.removesuffix(" FOUND"),
+                            "description": "ClamAV signature detection. Treat as a strong lead and preserve the sample for controlled analysis.",
+                            "path": file_path, "evidence": line, "confidence": "high",
+                            "source": "clamav", "engine": "ClamAV",
+                        })
+                    elif line.endswith(": OK"):
+                        current_path = line[:-4]
+                        files_scanned += 1
+                        if progress_callback:
+                            progress_callback({"current_path": current_path,
+                                               "clamav_files_scanned": files_scanned})
+                    elif line.startswith("Scanning:"):
+                        current_path = line.partition(":")[2].strip()
+                        if progress_callback:
+                            progress_callback({"current_path": current_path,
+                                               "clamav_files_scanned": files_scanned})
+        selector.close()
+        if timed_out:
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+            return {"available": True, "executed": True, "version": version,
+                    "findings": detections, "files_scanned": files_scanned,
+                    "current_path": current_path, "timed_out": True,
+                    "note": f"ClamAV exceeded its {timeout}-second time limit; results are incomplete."}
+        if pending:
+            line = pending.decode(errors="replace").strip()
+            if line.endswith(" FOUND"):
+                file_path, signature = line.rsplit(": ", 1)
+                detections.append({
+                    "id": f"clamav-{hashlib.sha256(line.encode()).hexdigest()[:12]}",
+                    "category": "malware", "severity": "high",
+                    "title": signature.removesuffix(" FOUND"),
+                    "description": "ClamAV signature detection. Treat as a strong lead and preserve the sample for controlled analysis.",
+                    "path": file_path, "evidence": line, "confidence": "high",
+                    "source": "clamav", "engine": "ClamAV",
+                })
+        return {"available": True, "executed": True, "version": version,
+                "return_code": process.wait(), "findings": detections,
+                "files_scanned": files_scanned, "current_path": current_path,
+                "note": "ClamAV ran locally with existing signatures; no signature update or network lookup was performed."}
     except subprocess.TimeoutExpired:
-        return {"available": True, "executed": True, "version": version if "version" in locals() else None,
-                "findings": [], "timed_out": True,
+        if process and process.poll() is None:
+            process.kill()
+            process.wait()
+        return {"available": True, "executed": True, "version": version,
+                "findings": detections, "files_scanned": files_scanned,
+                "current_path": current_path, "timed_out": True,
                 "note": f"ClamAV exceeded its {timeout}-second time limit; results are incomplete."}
     except OSError as exc:
-        return {"available": True, "executed": False, "findings": [],
+        if process and process.poll() is None:
+            process.kill()
+            process.wait()
+        return {"available": True, "executed": False, "findings": detections,
+                "files_scanned": files_scanned, "current_path": current_path,
                 "note": f"ClamAV could not be started: {str(exc)[:200]}"}
-
-    detections = []
-    for line in completed.stdout.splitlines():
-        if line.endswith(" FOUND"):
-            file_path, signature = line.rsplit(": ", 1)
-            detections.append({
-                "id": f"clamav-{hashlib.sha256(line.encode()).hexdigest()[:12]}",
-                "category": "malware", "severity": "high",
-                "title": signature.removesuffix(" FOUND"),
-                "description": "ClamAV signature detection. Treat as a strong lead and preserve the sample for controlled analysis.",
-                "path": file_path, "evidence": line, "confidence": "high",
-                "source": "clamav", "engine": "ClamAV",
-            })
-    return {"available": True, "executed": True, "version": version,
-            "return_code": completed.returncode, "findings": detections,
-            "note": "ClamAV ran locally with existing signatures; no signature update or network lookup was performed."}
-
 
 def _severity_for_mode(mode: int) -> str | None:
     if mode & stat.S_ISUID:
@@ -386,8 +460,23 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
     malwarebazaar = fetch_recent_malware()
     findings.extend(match_recent_hashes(scanned_hashes, malwarebazaar))
 
+    clamav_files_scanned = 0
+    def report_clamav_progress(update: dict[str, Any]) -> None:
+        nonlocal clamav_files_scanned
+        clamav_files_scanned = int(update.get("clamav_files_scanned", clamav_files_scanned))
+        report_progress("clamav", update.get("current_path"), force=True)
+        if progress_callback:
+            progress_callback({
+                "phase": "clamav", "current_path": update.get("current_path"),
+                "files_seen": files_seen, "files_hashed": files_hashed,
+                "bytes_hashed": bytes_hashed, "malware_matches": sum(1 for item in findings if item.get("category") == "malware"),
+                "script_indicators": len(capabilities), "clamav_files_scanned": clamav_files_scanned,
+                "elapsed_seconds": round(time.monotonic() - started, 1),
+                "time_budget_seconds": max_seconds,
+                "time_budget_remaining": round(max(0.0, max_seconds - (time.monotonic() - started)), 1),
+            })
     report_progress("clamav", None, force=True)
-    clamav = _clamav_scan(root_path)
+    clamav = _clamav_scan(root_path, progress_callback=report_clamav_progress)
     findings.extend(clamav["findings"])
     report_progress("configuration", None, force=True)
     posture = _security_posture()
