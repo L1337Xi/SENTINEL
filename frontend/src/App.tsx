@@ -428,7 +428,7 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
           <AssessmentFindingCharts findings={findings} capabilities={capabilities} />
           <div className="result-section">
             <div className="result-heading"><h3>Persistence inventory</h3><span>{persistence.length} STARTUP ENTRIES</span></div>
-            <div className="simple-table">{persistence.length === 0 ? <div className="empty-state">No entries were visible in the inspected startup locations.</div> : persistence.map((item, index) => <div className="simple-row" key={String(item.path) + index} style={{gridTemplateColumns:"1fr auto"}}>
+            <div className="simple-table inventory-list">{persistence.length === 0 ? <div className="empty-state">No entries were visible in the inspected startup locations.</div> : persistence.map((item, index) => <div className="simple-row" key={String(item.path) + index} style={{gridTemplateColumns:"1fr auto"}}>
               <strong>{String(item.path)}</strong><small>{String(item.category)} · {String(item.type)}</small>
             </div>)}</div>
           </div>
@@ -466,7 +466,7 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
           </div>}
           {capabilities.length > 0 && <div className="result-section">
             <div className="result-heading"><h3>Static capability indicators</h3><span>INFERRED FROM SCRIPT TEXT · LOW CONFIDENCE</span></div>
-            <div className="simple-table">{capabilities.map((item, index) => <div className="simple-row" key={String(item.path) + String(item.id) + index} style={{gridTemplateColumns:"1fr 1fr"}}>
+            <div className="simple-table inventory-list">{capabilities.map((item, index) => <div className="simple-row" key={String(item.path) + String(item.id) + index} style={{gridTemplateColumns:"1fr 1fr"}}>
               <strong>{String(item.label)}</strong><span>{String(item.path)}</span><small>Inferred · low confidence</small>
             </div>)}</div>
             <div className="scope-note"><span className="scope-mark">i</span><p>These are static indicators only. They do not prove the script ran or performed the described action. SENTINEL does not execute samples to observe behaviour.</p></div>
