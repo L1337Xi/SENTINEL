@@ -232,3 +232,61 @@ def test_case_validation_filters_and_close_reopen(tmp_path, monkeypatch):
         assert reopened["closed_at"] is None
         assert client.patch(f"/api/cases/{high['id']}",json={}).status_code == 422
         assert client.get("/api/cases/not-a-uuid").status_code == 404
+
+
+def test_host_scan_history_delete_is_scoped_and_protects_active_and_network_scans(tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "DATABASE_PATH", tmp_path / "scan-delete.db")
+    host_id = "11111111-1111-4111-8111-111111111111"
+    network_id = "22222222-2222-4222-8222-222222222222"
+    active_id = "33333333-3333-4333-8333-333333333333"
+    with TestClient(app) as client:
+        database.create_scan(host_id, "system", "This machine", "2026-11-18T10:00:00+00:00")
+        database.update_scan(host_id, status="completed", result={"hostname": "test"})
+        database.create_scan(network_id, "network", "192.168.1.0/24", "2026-11-18T10:01:00+00:00")
+        database.update_scan(network_id, status="completed", result={"responsive_hosts": 1})
+        database.create_scan(active_id, "system", "This machine", "2026-11-18T10:02:00+00:00")
+        database.update_scan(active_id, status="running", progress={"phase": "filesystem"})
+
+        deleted = client.delete(f"/api/scans/{host_id}")
+        assert deleted.status_code == 200
+        assert deleted.json()["deleted"] is True
+        assert client.get(f"/api/scans/{host_id}").status_code == 404
+        assert client.get(f"/api/scans/{network_id}").status_code == 200
+
+        protected_network = client.delete(f"/api/scans/{network_id}")
+        protected_active = client.delete(f"/api/scans/{active_id}")
+        assert protected_network.status_code == 409
+        assert protected_active.status_code == 409
+        assert client.get(f"/api/scans/{active_id}").status_code == 200
+        audit = database.list_audit_log(10, "scan")
+        assert any(row["action"] == "scan.deleted" and row["entity_id"] == host_id for row in audit)
+        filtered_audit = client.get("/api/audit-log", params={"entity_type": "scan"})
+        assert filtered_audit.status_code == 200
+        assert filtered_audit.json()["total"] >= 1
+
+
+def test_clear_host_scan_history_preserves_network_and_active_scans(tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "DATABASE_PATH", tmp_path / "clear-scan-history.db")
+    completed_id = "44444444-4444-4444-8444-444444444444"
+    failed_id = "55555555-5555-4555-8555-555555555555"
+    network_id = "66666666-6666-4666-8666-666666666666"
+    active_id = "77777777-7777-4777-8777-777777777777"
+    with TestClient(app) as client:
+        for scan_id, scan_type, status, target in [
+            (completed_id, "system", "completed", "This machine"),
+            (failed_id, "system", "failed", "This machine"),
+            (network_id, "network", "completed", "192.168.1.0/24"),
+            (active_id, "system", "running", "This machine"),
+        ]:
+            database.create_scan(scan_id, scan_type, target, "2026-11-18T10:00:00+00:00")
+            database.update_scan(scan_id, status=status, result={"test": True} if status == "completed" else None)
+
+        response = client.delete("/api/scans/system")
+        assert response.status_code == 200
+        assert response.json()["deleted"] == 2
+        assert client.get(f"/api/scans/{completed_id}").status_code == 404
+        assert client.get(f"/api/scans/{failed_id}").status_code == 404
+        assert client.get(f"/api/scans/{network_id}").status_code == 200
+        assert client.get(f"/api/scans/{active_id}").status_code == 200
+        audit = database.list_audit_log(10, "scan")
+        assert any(row["action"] == "scan.history_cleared" for row in audit)

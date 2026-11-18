@@ -6,6 +6,17 @@ SENTINEL is a self-hosted security operations platform under active development.
 
 > **Development status:** Early foundation release. The current implementation contains a FastAPI service, SQLite-backed event ingestion and retrieval, and an initial React/TypeScript dashboard. Detection engineering, correlation, case management, forensic workflows, network analysis, and reporting are planned work, not shipped capabilities. This is not yet a production SIEM, EDR, or incident-response platform.
 
+## Product editions
+
+SENTINEL is being developed as two editions on one shared codebase:
+
+- **SENTINEL Normal:** the community-oriented foundation for local host assessment, local threat intelligence, scoped network discovery, events, alerts and investigations.
+- **SENTINEL Advanced:** the planned commercial edition, extending the shared core with continuous monitoring, deeper process and memory analysis, behaviour detections, sandbox workflows, ransomware protection controls and multi-device management.
+
+The backend defaults to Normal. Set `SENTINEL_EDITION=advanced` in the local backend environment to preview the Advanced edition label and capability catalogue. This setting is a development/deployment mode only: it is **not** licence validation, authentication, a paywall or proof that planned Advanced capabilities are implemented. The `/api/edition` endpoint reports each capability as `available` or `planned`.
+
+The current repository still carries its existing proprietary licence. The Normal open-source licence and separate Advanced commercial licence have not yet been applied; those terms must be selected and documented before public redistribution or sale.
+
 ## Design objectives
 
 - **Local-first operation:** services bind to loopback by default.
@@ -26,6 +37,42 @@ SENTINEL is a self-hosted security operations platform under active development.
 7. **Report** findings with traceable references to the underlying evidence.
 
 The current implementation includes local event ingestion, one deterministic authentication detection rule, alert triage, append-only audit records, read-only host inventory, scoped private-network discovery, and an initial incident-case workflow. Sigma interoperability, broad event-source adapters, evidence acquisition, YARA, PCAP analysis, authentication, and release hardening remain on the roadmap.
+
+### Host assessment (feature branch)
+
+The Host Assessment workflow extends the existing system scan with a bounded, read-only local review. It collects the existing host inventory, hashes eligible regular files with SHA-256, checks an optional operator-supplied local hash-indicator file, and invokes ClamAV only when `clamscan` is already installed. It also inventories common Linux startup locations and privileged accounts and reviews selected firewall and SSH configuration.
+
+The default filesystem scan starts at `/`, skips virtual filesystems, caches and common dependency directories, and is limited to 50,000 files, 64 MiB per file and 180 seconds for the SENTINEL hash pass. ClamAV has its own 90-second timeout. The report records exclusions, skipped files, truncation and scanner availability. These bounds mean that a completed assessment is not proof that every file was inspected.
+
+To provide local SHA-256 indicators, create a JSON file such as `/etc/sentinel/hash_iocs.json` and set `SENTINEL_HASH_DB` for the backend service:
+
+```json
+{
+  "indicators": {
+    "0000000000000000000000000000000000000000000000000000000000000000": {
+      "label": "Analyst-provided sample name",
+      "severity": "critical",
+      "description": "Source and context for this indicator",
+      "capabilities": [
+        {"id": "network_communication", "label": "Network communication"}
+      ]
+    }
+  }
+}
+```
+
+Only valid 64-character hexadecimal SHA-256 keys are loaded. An optional MalwareBazaar Community API integration compares scanned SHA-256 hashes against its latest 100 additions. Obtain an API key from [abuse.ch](https://auth.abuse.ch/) and set it only in the local backend process environment as `SENTINEL_MALWAREBAZAAR_API_KEY`. Never put the key in source code, Git, screenshots, or chat. The feed is cached locally for one hour; a previous feed may be used as a clearly labelled stale cache if refresh fails. The latest-100 feed is limited intelligence, not a complete malware database; no match does not mean a file is safe. Companies and other commercial/for-profit deployments must review the [MalwareBazaar Community API terms](https://bazaar.abuse.ch/api/) because enhanced commercial usage may require a paid subscription.
+
+SENTINEL also performs a bounded set of optional [CIRCL hashlookup](https://www.circl.lu/services/hashlookup/) SHA-256 lookups for known-file context. It prioritizes hashes shared by multiple scanned paths and defaults to at most 20 distinct lookups per scan; set `SENTINEL_CIRCL_MAX_LOOKUPS=0` to disable it. Positive and negative results are cached locally (30 days and 7 days respectively). CIRCL records known files from sources such as NSRL and Linux distributions; a match is **not** a malware verdict and must never be treated as proof that a file is safe. The report keeps this context separate from malware findings. Only SHA-256 values are sent to the remote service; filenames, local paths and file contents are not sent. CIRCL hashlookup data is CC-BY; attribution is provided here.
+
+The cache defaults to `backend/data/threat_intel_cache.json` and can be relocated with `SENTINEL_THREAT_INTEL_CACHE`. The cache is local operational data and should not be committed or shared without review. Both providers are best-effort external services; local hashing and local indicators continue if either is unavailable.
+
+ClamAV uses its already-installed local signatures; SENTINEL does not install ClamAV or update signatures. Static script-pattern matches are low-confidence leads, not proof of malicious execution. SENTINEL preserves the original AV signature and distinguishes detection severity from the assessment confidence. A ClamAV match starts as an unverified lead rather than a confirmed infection. An analyst can investigate a finding using local file type, SHA-256/MD5, Debian package ownership, `dpkg -V`, available conffile checksums and APT repository context. Matching package-integrity evidence can support a **likely false positive** assessment; it never silently removes the original detection or automatically creates a permanent allow-list.
+
+The Host Assessment finding workflow offers guarded response actions. Quarantine first verifies the sample copy and hash, stores it under a local restricted-permission quarantine directory (default `/var/lib/sentinel/quarantine`), and supports hash-verified restore without overwriting an existing file. Permanent deletion requires typing `DELETE <full-sha256>`. Both actions re-check the file hash immediately before acting, reject symlinks and hard-linked files, and refuse package-managed files. System/package configuration roots such as `/etc`, `/usr`, `/bin`, `/lib` and `/boot` are protected. For package-managed software, use the OS package manager. These controls are local administrative response actions, not a replacement for backups or incident-response evidence preservation.
+
+The workflow does not execute samples or upload file contents. Quarantine is reversible; permanent deletion is not. The dashboard can export the assessment as JSON.
+
 
 ## Capability status
 
