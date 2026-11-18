@@ -123,7 +123,16 @@ def quarantine_file(path_value: str, expected_sha256: str) -> dict[str, Any]:
     temp.write_text(json.dumps(record), encoding="utf-8")
     os.chmod(temp, 0o600)
     os.replace(temp, manifest)
-    path.unlink()
+    if _hash(path)[0] != sha:
+        stored.unlink(missing_ok=True)
+        manifest.unlink(missing_ok=True)
+        raise ValueError("Original file changed during quarantine; no file was removed.")
+    try:
+        path.unlink()
+    except OSError:
+        stored.unlink(missing_ok=True)
+        manifest.unlink(missing_ok=True)
+        raise
     return record
 
 def list_quarantine() -> list[dict[str, Any]]:
