@@ -27,6 +27,32 @@ SENTINEL is a self-hosted security operations platform under active development.
 
 The current implementation includes local event ingestion, one deterministic authentication detection rule, alert triage, append-only audit records, read-only host inventory, scoped private-network discovery, and an initial incident-case workflow. Sigma interoperability, broad event-source adapters, evidence acquisition, YARA, PCAP analysis, authentication, and release hardening remain on the roadmap.
 
+### Host assessment (feature branch)
+
+The Host Assessment workflow extends the existing system scan with a bounded, read-only local review. It collects the existing host inventory, hashes eligible regular files with SHA-256, checks an optional operator-supplied local hash-indicator file, and invokes ClamAV only when `clamscan` is already installed. It also inventories common Linux startup locations and privileged accounts and reviews selected firewall and SSH configuration.
+
+The default filesystem scan starts at `/`, skips virtual filesystems, caches and common dependency directories, and is limited to 50,000 files, 64 MiB per file and 180 seconds for the SENTINEL hash pass. ClamAV has its own 90-second timeout. The report records exclusions, skipped files, truncation and scanner availability. These bounds mean that a completed assessment is not proof that every file was inspected.
+
+To provide local SHA-256 indicators, create a JSON file such as `/etc/sentinel/hash_iocs.json` and set `SENTINEL_HASH_DB` for the backend service:
+
+```json
+{
+  "indicators": {
+    "REPLACE_WITH_64_CHARACTER_SHA256": {
+      "label": "Analyst-provided sample name",
+      "severity": "critical",
+      "description": "Source and context for this indicator",
+      "capabilities": [
+        {"id": "network_communication", "label": "Network communication"}
+      ]
+    }
+  }
+}
+```
+
+Only valid 64-character hexadecimal SHA-256 keys are loaded. No remote threat-intelligence feed or built-in malware database is included. ClamAV uses its already-installed local signatures; SENTINEL does not install ClamAV or update signatures. Static script-pattern matches are low-confidence leads, not proof of malicious execution. Suspicious files are never executed, modified, quarantined or uploaded. The dashboard can export the assessment as JSON.
+
+
 ## Capability status
 
 | Area | Status |
