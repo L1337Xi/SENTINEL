@@ -91,7 +91,7 @@ def _protected_path(path: Path) -> bool:
                  "/var/lib/dpkg", "/var/lib/sentinel")
     return any(resolved == Path(root) or Path(root) in resolved.parents for root in protected)
 
-def quarantine_file(path_value: str, expected_sha256: str) -> dict[str, Any]:
+def quarantine_file(path_value: str, expected_sha256: str, *, scan_id: str | None = None, finding_id: str | None = None) -> dict[str, Any]:
     path = Path(path_value)
     if not path.is_absolute():
         raise ValueError("Finding path must be absolute.")
@@ -118,7 +118,8 @@ def quarantine_file(path_value: str, expected_sha256: str) -> dict[str, Any]:
     record = {"id": item_id, "original_path": str(path), "sha256": sha,
               "size_bytes": info.st_size, "mode": stat.S_IMODE(info.st_mode),
               "uid": info.st_uid, "gid": info.st_gid,
-              "quarantined_at": datetime.now(UTC).isoformat(), "status": "quarantined"}
+              "quarantined_at": datetime.now(UTC).isoformat(), "status": "quarantined",
+              "scan_id": scan_id, "finding_id": finding_id}
     temp = manifest.with_suffix(".tmp")
     temp.write_text(json.dumps(record), encoding="utf-8")
     os.chmod(temp, 0o600)
@@ -167,7 +168,8 @@ def restore_quarantined(item_id: str) -> dict[str, Any]:
         raise OSError("Restored file failed verification.")
     stored.unlink()
     manifest.unlink()
-    return {"id": normalized, "restored": True, "path": str(original), "sha256": record["sha256"]}
+    return {"id": normalized, "restored": True, "path": str(original), "sha256": record["sha256"],
+            "scan_id": record.get("scan_id"), "finding_id": record.get("finding_id")}
 
 def permanently_delete_file(path_value: str, expected_sha256: str, confirmation: str) -> dict[str, Any]:
     path = Path(path_value)
