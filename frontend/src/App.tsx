@@ -481,7 +481,7 @@ function AssessmentFindingCharts({ findings, capabilities }: { findings: Record<
   const [selectedSeverity, setSelectedSeverity] = useState("all");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const severityLevels = ["critical", "high", "medium", "low"] as const;
-  const categoryLabel = (value: unknown) => String(value ?? "other").replace(/_/g, " ").replace(/\\b\\w/g, (letter) => letter.toUpperCase());
+  const categoryLabel = (value: unknown) => String(value ?? "other").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   const records = [
     ...findings.map((finding, index) => {
       const mapped = asArray<Record<string, unknown>>(finding.capabilities);
