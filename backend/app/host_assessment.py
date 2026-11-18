@@ -84,7 +84,10 @@ def _security_posture() -> dict[str, Any]:
     firewall_tools = [name for name in ("ufw", "firewall-cmd", "nft", "iptables") if shutil.which(name)]
     firewall_active = False
     if shutil.which("ufw"):
-        firewall_active = os.path.exists("/etc/ufw/ufw.conf") and "ENABLED=yes" in Path("/etc/ufw/ufw.conf").read_text(errors="ignore")
+        try:
+            firewall_active = os.path.exists("/etc/ufw/ufw.conf") and "ENABLED=yes" in Path("/etc/ufw/ufw.conf").read_text(errors="ignore")
+        except OSError:
+            firewall_active = False
     if firewall_active:
         checks.append({"id": "firewall", "severity": "info", "status": "enabled", "title": "UFW firewall enabled", "evidence": "UFW configuration reports ENABLED=yes"})
     elif firewall_tools:
@@ -133,6 +136,7 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
             name for name in dirs
             if not (current_path / name).is_symlink()
             and str((current_path / name).resolve()) not in excluded
+            and name not in {".git", "node_modules", ".venv", "venv", "__pycache__"}
             and not name.startswith(".cache")
         ]
         for name in files:
