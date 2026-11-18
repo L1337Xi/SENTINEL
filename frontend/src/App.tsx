@@ -396,7 +396,7 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
         </div>
         {progressPhase === "clamav" && <Resource label="CLAMAV FILES SCANNED" value={String(liveProgress.clamav_files_scanned ?? 0)} detail="Files reported by ClamAV as its scan runs" />}
         <div className="live-current"><span className="meta-label">{progressPhase === "clamav" ? "CLAMAV CURRENT FILE" : "CURRENT FILE / LOCATION"}</span><code>{String(liveProgress.current_path ?? (progressPhase === "clamav" ? "Waiting for ClamAV to report its first file…" : progressPhase === "threat intelligence" ? "Checking the latest MalwareBazaar hash feed…" : "Preparing assessment…"))}</code></div>
-        <p className="live-note">Updates are polled from the local scanner. The filesystem time remaining is a scan budget, not a guaranteed completion ETA. ClamAV does not expose per-file progress in this scan mode.</p>
+        <p className="live-note">Updates are polled from the local scanner. The filesystem time remaining is a scan budget, not a guaranteed completion ETA. ClamAV progress is streamed from its local scan output; the file count reflects reported results.</p>
       </section>}
       {scan?.status === "failed" && <div className="scan-error">{scan.error ?? "The assessment failed."}</div>}
       {done && <div className="host-results">
