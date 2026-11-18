@@ -175,6 +175,7 @@ body{background:radial-gradient(ellipse at 78% 0%,rgba(30,83,49,.16),transparent
 .active-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-4px 0 12px}
 .active-filters>span{padding:5px 8px;border:1px solid #344638;border-radius:3px;color:#aebcaf;font-size:9px}
 .active-filters button{border:0;background:transparent;color:#8fc39b;font-size:9px;cursor:pointer}
+.active-filters .category-filter-label{display:inline-flex;align-items:center}.active-filters .category-filter-label select{min-width:150px;max-width:min(260px,65vw);padding:5px 25px 5px 8px;border:1px solid #45634b;border-radius:3px;background:#111a14;color:#c8d8ca;font:inherit;font-size:9px;cursor:pointer}.active-filters .category-filter-label select:focus-visible{outline:2px solid #83b88c;outline-offset:2px}
 .finding-evidence-row{display:grid;grid-template-columns:68px minmax(0,1fr) minmax(100px,auto);gap:12px;align-items:start;padding:13px 5px;border-top:1px solid #26372c}
 .finding-evidence-main{min-width:0}
 .finding-evidence-main strong,.finding-evidence-main small,.finding-evidence-main code{display:block;overflow-wrap:anywhere}
