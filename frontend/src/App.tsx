@@ -333,6 +333,9 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
   const done = scan?.status === "completed";
   const assessment = asObject(result.security_assessment);
   const assessmentSummary = asObject(assessment.summary);
+  const liveProgress = asObject(scan?.progress);
+  const isAssessing = scan?.scan_type === "system" && (scan.status === "queued" || scan.status === "running");
+  const progressPhase = String(liveProgress.phase ?? "starting").replaceAll("_", " ");
   const findings = asArray<Record<string, unknown>>(assessment.findings);
   const capabilities = asArray<Record<string, unknown>>(assessment.script_capabilities);
   const malwareFindings = findings.filter((finding) => finding.category === "malware");
@@ -357,6 +360,17 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
     </PageHeading>
     <div className="scope-note host-scope"><span className="scope-mark">i</span><p>This performs a bounded, read-only local assessment: host inventory, SHA-256 file hashing against operator-supplied local indicators, static script-pattern review and selected security-configuration checks. Suspicious files are never executed, changed, quarantined or uploaded. File-count, size and time limits apply; a clean result does not prove the system is malware-free.</p></div>
     <section className="panel full-panel scan-panel"><div className="panel-title"><div><div className="eyebrow">ASSESSMENT STATUS</div><h2>Latest host inventory</h2></div><span className="section-note">{scans.filter((item) => item.scan_type === "system").length} TOTAL RUNS</span></div><ScanHeader scan={scan} />
+      {isAssessing && <section className="live-assessment" aria-live="polite">
+        <div className="result-heading"><h3>Live assessment activity</h3><span className="scan-state running">{progressPhase.toUpperCase()}</span></div>
+        <div className="resource-grid">
+          <Resource label="FILES VISITED" value={String(liveProgress.files_seen ?? 0)} detail={`${String(liveProgress.files_hashed ?? 0)} successfully hashed`} />
+          <Resource label="MALWARE MATCHES" value={String(liveProgress.malware_matches ?? 0)} detail="Local hash matches so far · ClamAV reports after its pass" />
+          <Resource label="SCRIPT INDICATORS" value={String(liveProgress.script_indicators ?? 0)} detail="Static indicators; not confirmed malware" />
+          <Resource label="ELAPSED" value={`${Number(liveProgress.elapsed_seconds ?? 0).toFixed(1)} s`} detail={`Filesystem budget remaining: ${Number(liveProgress.time_budget_remaining ?? 180).toFixed(1)} s`} />
+        </div>
+        <div className="live-current"><span className="meta-label">CURRENT FILE / LOCATION</span><code>{String(liveProgress.current_path ?? (progressPhase === "clamav" ? "ClamAV is scanning the configured filesystem scope…" : "Preparing assessment…"))}</code></div>
+        <p className="live-note">Updates are polled from the local scanner. The filesystem time remaining is a scan budget, not a guaranteed completion ETA. ClamAV does not expose per-file progress in this scan mode.</p>
+      </section>}
       {scan?.status === "failed" && <div className="scan-error">{scan.error ?? "The assessment failed."}</div>}
       {done && <div className="host-results">
         <div className="host-identity"><div className="host-initial">H</div><div><strong>{String(result.hostname ?? "Unknown host")}</strong><small>{String(result.operating_system ?? "Operating system unavailable")}</small></div></div>
