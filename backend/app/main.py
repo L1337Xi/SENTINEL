@@ -40,6 +40,7 @@ from .database import (
 from .database import get_case as fetch_case
 from .detections import RULES, evaluate_event
 from .evidence import router as evidence_router
+from .editions import edition_manifest
 from .host_assessment import run_host_assessment
 from .scanner import network_discovery, system_inventory, validate_local_network
 from .schemas import (
@@ -77,6 +78,12 @@ def on_startup() -> None:
 
 
 app.include_router(evidence_router)
+
+
+@app.get("/api/edition", tags=["system"])
+def get_edition() -> dict:
+    """Return the configured edition and its published capability catalogue."""
+    return edition_manifest()
 
 
 @app.get("/api/health", tags=["system"])
