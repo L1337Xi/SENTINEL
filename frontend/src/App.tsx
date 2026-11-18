@@ -563,7 +563,9 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
               const inferred = capabilities.filter((item) => item.path === finding.path);
               const labels = [...mapped, ...inferred];
               const findingId = String(finding.id ?? index);
-              const investigation = asObject(investigations[findingId]);
+              const investigation = asObject(investigations[findingId] ?? finding.investigation);
+              const responseAction = asObject(finding.response_action);
+              const hasResponseAction = Boolean(finding.response_action);
               const packageInfo = asObject(investigation.package);
               const assessmentInfo = asObject(investigation.assessment);
               const hasInvestigation = Boolean(investigation.assessment);
@@ -580,10 +582,11 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
                 <div className="finding-response-actions">
                   <button className="button button-secondary" onClick={() => void investigateFinding(finding)} disabled={responseBusy === findingId}>{responseBusy === findingId ? "Investigating…" : investigation.assessment ? "Re-investigate file" : "Investigate file"}</button>
                   {hasInvestigation && <span className="history-protected">{String(assessmentInfo.verdict ?? "unverified").replace(/_/g, " ").toUpperCase()} · {String(assessmentInfo.confidence ?? "unknown")} CONFIDENCE</span>}
-                  <button className="button button-danger" onClick={() => void respondFinding(finding, "quarantine")} disabled={responseBusy === findingId || isPackageManaged || !finding.sha256}>Quarantine</button>
-                  <button className="text-action history-delete" onClick={() => void respondFinding(finding, "delete")} disabled={responseBusy === findingId || isPackageManaged || !finding.sha256}>Delete permanently</button>
+                  <button className="button button-danger" onClick={() => void respondFinding(finding, "quarantine")} disabled={responseBusy === findingId || isPackageManaged || !finding.sha256 || hasResponseAction}>Quarantine</button>
+                  <button className="text-action history-delete" onClick={() => void respondFinding(finding, "delete")} disabled={responseBusy === findingId || isPackageManaged || !finding.sha256 || hasResponseAction}>Delete permanently</button>
                 </div>
                 {hasInvestigation && <div className="scope-note"><span className="scope-mark">i</span><p>{String(assessmentInfo.rationale ?? "")} {isPackageManaged ? `Package: ${String(packageInfo.package)} · Integrity: ${String(packageInfo.integrity)} · Provenance: ${String(packageInfo.provenance)}` : "No owning package was confirmed."} File type: {String(investigation.file_type ?? "unknown")}.</p></div>}
+                {hasResponseAction && <p className="history-note">Response recorded: {String(responseAction.action ?? "completed")} · {formatDate(String(responseAction.occurred_at ?? ""))}</p>}
                 {responseMessages[findingId] && <p className="history-note">{responseMessages[findingId]}</p>}
                 {isPackageManaged && <p className="history-note">Package-managed file: SENTINEL disables quarantine and permanent deletion. Use the OS package manager after investigation.</p>}
               </div>;
