@@ -14,7 +14,6 @@ def disable_live_circl_for_host_scan(monkeypatch):
     })
 
 
-
 def test_hash_indicator_match_is_reported_without_modifying_file(tmp_path, monkeypatch):
     sample = tmp_path / "sample.bin"
     payload = b"synthetic test sample"
