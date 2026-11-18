@@ -339,7 +339,7 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
   const assessmentSummary = asObject(assessment.summary);
   const liveProgress = asObject(scan?.progress);
   const isAssessing = scan?.scan_type === "system" && (scan.status === "queued" || scan.status === "running");
-  const progressPhase = String(liveProgress.phase ?? "starting").replaceAll("_", " ");
+  const progressPhase = String(liveProgress.phase ?? "starting").replace(/_/g, " ");
   const findings = asArray<Record<string, unknown>>(assessment.findings);
   const capabilities = asArray<Record<string, unknown>>(assessment.script_capabilities);
   const malwareFindings = findings.filter((finding) => finding.category === "malware");
