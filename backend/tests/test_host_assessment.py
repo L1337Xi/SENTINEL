@@ -1,7 +1,18 @@
 import hashlib
 import json
 
+import pytest
+
 from app import host_assessment, threat_intel
+
+
+@pytest.fixture(autouse=True)
+def disable_live_circl_for_host_scan(monkeypatch):
+    monkeypatch.setattr(host_assessment, "lookup_circl_hashes", lambda hashes: {
+        "provider": "CIRCL hashlookup", "status": "disabled", "matches": [],
+        "lookups_performed": 0, "cache_hits": 0,
+    })
+
 
 
 def test_hash_indicator_match_is_reported_without_modifying_file(tmp_path, monkeypatch):
@@ -233,3 +244,117 @@ def test_clamav_streams_current_file_and_scan_count(tmp_path, monkeypatch):
     assert result["findings"][0]["path"] == "/tmp/two.bin"
     assert any(item["current_path"] == "/tmp/one.bin" for item in updates)
     assert updates[-1]["clamav_files_scanned"] == 2
+
+
+def test_malwarebazaar_feed_is_cached_between_scans(tmp_path, monkeypatch):
+    from io import BytesIO
+
+    digest = hashlib.sha256(b"cached malware fixture").hexdigest()
+    monkeypatch.setenv("SENTINEL_MALWAREBAZAAR_API_KEY", "test-key")
+    monkeypatch.setenv("SENTINEL_THREAT_INTEL_CACHE", str(tmp_path / "intel.json"))
+    calls = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self, limit):
+            return json.dumps({
+                "query_status": "ok",
+                "data": [{"sha256_hash": digest, "signature": "FixtureFamily"}],
+            }).encode()
+
+    def fake_urlopen(request, timeout):
+        calls.append((request.full_url, timeout))
+        return Response()
+
+    monkeypatch.setattr(threat_intel, "urlopen", fake_urlopen)
+    first = threat_intel.fetch_recent_malware()
+    second = threat_intel.fetch_recent_malware()
+
+    assert first["status"] == "ok"
+    assert first["cached"] is False
+    assert second["status"] == "ok"
+    assert second["cached"] is True
+    assert second["records_received"] == 1
+    assert len(calls) == 1
+
+
+def test_circl_known_file_lookup_is_cached_and_not_a_malware_finding(tmp_path, monkeypatch):
+    from urllib.error import HTTPError
+
+    digest = hashlib.sha256(b"known benign fixture").hexdigest()
+    monkeypatch.setenv("SENTINEL_THREAT_INTEL_CACHE", str(tmp_path / "intel.json"))
+    calls = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self, limit):
+            return json.dumps({
+                "FileName": "/usr/bin/example",
+                "FileSize": "1234",
+                "source": "fixture-source",
+                "db": "fixture-db",
+                "hashlookup:trust": 90,
+            }).encode()
+
+    def fake_urlopen(request, timeout):
+        calls.append(request.full_url)
+        return Response()
+
+    monkeypatch.setattr(threat_intel, "urlopen", fake_urlopen)
+    hashes = {digest: ["/tmp/example.bin"]}
+    first = threat_intel.lookup_circl_hashes(hashes, max_lookups=5)
+    second = threat_intel.lookup_circl_hashes(hashes, max_lookups=5)
+
+    assert first["known_file_matches"] == 1
+    assert first["matches"][0]["sha256"] == digest
+    assert first["matches"][0]["paths"] == ["/tmp/example.bin"]
+    assert first["matches"][0]["cached"] is False
+    assert second["matches"][0]["cached"] is True
+    assert second["cache_hits"] == 1
+    assert len(calls) == 1
+    assert threat_intel.match_recent_hashes(hashes, {"status": "ok", "entries": []}) == []
+
+
+def test_circl_404_is_cached_as_no_context(tmp_path, monkeypatch):
+    from urllib.error import HTTPError
+
+    digest = hashlib.sha256(b"unknown fixture").hexdigest()
+    monkeypatch.setenv("SENTINEL_THREAT_INTEL_CACHE", str(tmp_path / "intel.json"))
+    calls = []
+
+    def fake_urlopen(request, timeout):
+        calls.append(request.full_url)
+        raise HTTPError(request.full_url, 404, "Not Found", {}, None)
+
+    monkeypatch.setattr(threat_intel, "urlopen", fake_urlopen)
+    first = threat_intel.lookup_circl_hashes({digest: ["/tmp/unknown.bin"]}, max_lookups=1)
+    second = threat_intel.lookup_circl_hashes({digest: ["/tmp/unknown.bin"]}, max_lookups=1)
+
+    assert first["not_found"] == 1
+    assert second["not_found"] == 1
+    assert second["cache_hits"] == 1
+    assert len(calls) == 1
+
+
+def test_stale_malwarebazaar_feed_remains_identified_as_stale():
+    digest = hashlib.sha256(b"stale feed fixture").hexdigest()
+    feed = {
+        "status": "stale",
+        "entries": [{"sha256": digest, "signature": "StaleFixture"}],
+        "feed_scope": "latest 100 additions",
+        "cached": True,
+    }
+    matches = threat_intel.match_recent_hashes({digest: ["/tmp/stale.bin"]}, feed)
+    assert len(matches) == 1
+    assert matches[0]["feed_status"] == "stale"
+    assert matches[0]["feed_cached"] is True
