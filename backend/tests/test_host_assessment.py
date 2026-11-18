@@ -63,3 +63,60 @@ def test_scan_reports_limits_and_does_not_follow_symlinks(tmp_path, monkeypatch)
     assert result["summary"]["truncated"] is True
     assert "No files were executed" in result["limitations"][-1]
     assert result["summary"]["files_hashed"] <= 1
+
+
+def test_firewall_detection_ignores_docker_rules_when_host_input_is_accept(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(host_assessment.shutil, "which", lambda name: f"/usr/sbin/{name}" if name in {"ufw", "nft", "iptables"} else None)
+
+    def fake_run(args, **kwargs):
+        if args[:2] == ["ufw", "status"]:
+            return SimpleNamespace(returncode=0, stdout="Status: inactive\n", stderr="")
+        if args[:4] == ["nft", "-n", "list", "ruleset"]:
+            return SimpleNamespace(returncode=0, stdout=(
+                "table ip nat { chain PREROUTING { type nat hook prerouting priority dstnat; policy accept; } }\n"
+                "table ip filter { chain FORWARD { type filter hook forward priority filter; policy drop; } }\n"
+            ), stderr="")
+        if args[:3] == ["iptables", "-S", "INPUT"]:
+            return SimpleNamespace(returncode=0, stdout="-P INPUT ACCEPT\n", stderr="")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(host_assessment.subprocess, "run", fake_run)
+    result = host_assessment._security_posture()
+    firewall = next(item for item in result["checks"] if item["id"] == "firewall")
+    assert firewall["status"] == "inactive"
+    assert firewall["severity"] == "medium"
+
+
+def test_firewall_detection_recognizes_nftables_input_default_deny(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(host_assessment.shutil, "which", lambda name: "/usr/sbin/nft" if name == "nft" else None)
+
+    def fake_run(args, **kwargs):
+        assert args == ["nft", "-n", "list", "ruleset"]
+        return SimpleNamespace(returncode=0, stdout=(
+            "table inet filter { chain input { type filter hook input priority filter; policy drop; } }\n"
+        ), stderr="")
+
+    monkeypatch.setattr(host_assessment.subprocess, "run", fake_run)
+    result = host_assessment._security_posture()
+    firewall = next(item for item in result["checks"] if item["id"] == "firewall")
+    assert firewall["status"] == "enabled"
+    assert firewall["severity"] == "info"
+
+
+def test_firewall_detection_recognizes_active_ufw(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(host_assessment.shutil, "which", lambda name: "/usr/sbin/ufw" if name == "ufw" else None)
+
+    def fake_run(args, **kwargs):
+        assert args == ["ufw", "status"]
+        return SimpleNamespace(returncode=0, stdout="Status: active\n", stderr="")
+
+    monkeypatch.setattr(host_assessment.subprocess, "run", fake_run)
+    result = host_assessment._security_posture()
+    firewall = next(item for item in result["checks"] if item["id"] == "firewall")
+    assert firewall["status"] == "enabled"
