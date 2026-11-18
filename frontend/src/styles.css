@@ -128,3 +128,14 @@ body{background:radial-gradient(ellipse at 78% 0%,rgba(30,83,49,.16),transparent
 .simple-table{display:flex;flex-direction:column}.simple-row{display:grid;grid-template-columns:1fr 1fr auto;align-items:center;gap:16px;padding:12px 8px;border-bottom:1px solid #26372c;font-size:11px}.simple-row:last-child{border-bottom:0}.simple-row strong{color:#f0f6f1;font-weight:500}.simple-row span{color:#c2cec5;text-align:right;font-variant-numeric:tabular-nums}.simple-row small{color:#829187;font-size:10px;text-align:right}.process-list .simple-row{grid-template-columns:1.5fr 1fr 1fr}.empty-state{padding:24px;text-align:center;color:#829187;font-size:12px}
 .result-section{margin-top:22px}.result-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px}.result-heading h3{margin:0;font-size:15px;font-weight:600;color:#f0f6f1}.result-heading span{font:9px var(--mono);letter-spacing:.13em;color:#89968d;white-space:nowrap}
 @media(max-width:760px){.simple-row{grid-template-columns:1fr 1fr}.simple-row small{display:none}.process-list .simple-row{grid-template-columns:1fr}.host-meta-grid{grid-template-columns:1fr 1fr}.host-identity{padding:14px 16px}.host-initial{width:40px;height:40px;font-size:18px}}
+
+/* Host security assessment findings and evidence flow */
+.capability-report{padding:14px 0;border-bottom:1px solid #26372c}
+.capability-flow{display:flex;align-items:stretch;gap:10px;overflow-x:auto;padding:4px 0 10px}
+.flow-node{display:flex;flex:1 0 180px;min-width:180px;flex-direction:column;gap:7px;padding:13px 14px;background:#141d17;border:1px solid #35513d;border-radius:4px}
+.flow-node small{font:9px var(--mono);letter-spacing:.12em;color:#91a296}
+.flow-node strong{font-size:12px;font-weight:600;color:#e5eee7;overflow-wrap:anywhere}
+.flow-node span{font-size:10px;line-height:1.5;color:#9baa9f;overflow-wrap:anywhere}
+.flow-arrow{display:flex;align-items:center;color:#8abf96;font-size:20px;flex:0 0 auto}
+.hash-line{display:block;margin-top:6px;color:#83958a;font:10px var(--mono);overflow-wrap:anywhere}
+.capability-report .scope-note{margin-top:10px}
