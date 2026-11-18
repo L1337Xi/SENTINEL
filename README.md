@@ -67,7 +67,11 @@ SENTINEL also performs a bounded set of optional [CIRCL hashlookup](https://www.
 
 The cache defaults to `backend/data/threat_intel_cache.json` and can be relocated with `SENTINEL_THREAT_INTEL_CACHE`. The cache is local operational data and should not be committed or shared without review. Both providers are best-effort external services; local hashing and local indicators continue if either is unavailable.
 
-ClamAV uses its already-installed local signatures; SENTINEL does not install ClamAV or update signatures. Static script-pattern matches are low-confidence leads, not proof of malicious execution. Suspicious files are never executed, modified, quarantined or uploaded. The dashboard can export the assessment as JSON.
+ClamAV uses its already-installed local signatures; SENTINEL does not install ClamAV or update signatures. Static script-pattern matches are low-confidence leads, not proof of malicious execution. SENTINEL preserves the original AV signature and distinguishes detection severity from the assessment confidence. A ClamAV match starts as an unverified lead rather than a confirmed infection. An analyst can investigate a finding using local file type, SHA-256/MD5, Debian package ownership, `dpkg -V`, available conffile checksums and APT repository context. Matching package-integrity evidence can support a **likely false positive** assessment; it never silently removes the original detection or automatically creates a permanent allow-list.
+
+The Host Assessment finding workflow offers guarded response actions. Quarantine first verifies the sample copy and hash, stores it under a local restricted-permission quarantine directory (default `/var/lib/sentinel/quarantine`), and supports hash-verified restore without overwriting an existing file. Permanent deletion requires typing `DELETE <full-sha256>`. Both actions re-check the file hash immediately before acting, reject symlinks and hard-linked files, and refuse package-managed files. System/package configuration roots such as `/etc`, `/usr`, `/bin`, `/lib` and `/boot` are protected. For package-managed software, use the OS package manager. These controls are local administrative response actions, not a replacement for backups or incident-response evidence preservation.
+
+The workflow does not execute samples or upload file contents. Quarantine is reversible; permanent deletion is not. The dashboard can export the assessment as JSON.
 
 
 ## Capability status
