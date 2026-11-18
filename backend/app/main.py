@@ -14,31 +14,40 @@ from .config import CORS_ORIGINS, MAX_PAGE_SIZE
 from .database import (
     add_case_note,
     append_audit,
+    create_alert,
     create_case,
+    create_scan,
     get_case as fetch_case,
+    initialize_database,
     link_event_to_case,
+    list_alerts,
+    list_audit_log,
     list_case_events,
     list_case_timeline,
     list_cases,
-    row_to_case,
-    row_to_case_timeline,
-    update_case,
-    create_alert,
-    create_scan,
-    initialize_database,
-    list_alerts,
-    list_audit_log,
     row_to_alert,
     row_to_audit,
+    row_to_case,
+    row_to_case_timeline,
     row_to_event,
     row_to_scan,
     session,
     update_alert,
+    update_case,
     update_scan,
 )
 from .detections import RULES, evaluate_event
 from .scanner import network_discovery, system_inventory, validate_local_network
-from .schemas import AlertUpdate, CaseCreate, CaseEventLink, CaseNoteCreate, CaseUpdate, EventCreate, EventPage, NetworkScanCreate
+from .schemas import (
+    AlertUpdate,
+    CaseCreate,
+    CaseEventLink,
+    CaseNoteCreate,
+    CaseUpdate,
+    EventCreate,
+    EventPage,
+    NetworkScanCreate,
+)
 
 app = FastAPI(
     title="L1337XI SENTINEL API",
