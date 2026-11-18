@@ -132,7 +132,7 @@ def permanently_delete_file(path_value: str, expected_sha256: str, confirmation:
     if not path.is_absolute(): raise ValueError("Finding path must be absolute.")
     if _protected_path(path): raise PermissionError("System and package configuration paths are protected from permanent deletion.")
     if confirmation != f"DELETE {expected_sha256.lower()}":
-        raise PermissionError("Type DELETE followed by the full SHA-256 to confirm permanent deletion.")
+        raise PermissionError("The exact confirmation must be DELETE followed by the full SHA-256.")
     sha, md5, info = _hash(path)
     if sha != expected_sha256.lower(): raise ValueError("File changed since scan; deletion refused.")
     if _package(path, md5)["owned"]: raise PermissionError("Package-managed files cannot be deleted by SENTINEL.")
