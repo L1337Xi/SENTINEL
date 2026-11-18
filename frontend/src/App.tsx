@@ -137,6 +137,38 @@ export default function App() {
     } finally { setBusy(false); }
   }
 
+  async function deleteHostScan(id: string) {
+    if (!window.confirm("Delete this host assessment result? This permanently removes the saved scan record, but does not change files on the machine or delete network scans, alerts, or cases.")) return;
+    setError("");
+    try {
+      await api.deleteScan(id);
+      const history = await api.scans();
+      setScans(history.items);
+      setActiveScan((current) => current?.id === id
+        ? history.items.find((item) => item.scan_type === "system") ?? null
+        : current);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete the host assessment result.");
+    }
+  }
+
+  async function clearHostScanHistory() {
+    const completedCount = scans.filter((item) => item.scan_type === "system" && ["completed", "failed"].includes(item.status)).length;
+    if (!completedCount) return;
+    if (!window.confirm(`Delete all ${completedCount} completed/failed host assessment results? Active scans, network scans, alerts, and cases will be kept. This cannot be undone.`)) return;
+    setError("");
+    try {
+      await api.clearHostScanHistory();
+      const history = await api.scans();
+      setScans(history.items);
+      setActiveScan((current) => current && ["queued", "running"].includes(current.status)
+        ? current
+        : history.items.find((item) => item.scan_type === "system") ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not clear host assessment history.");
+    }
+  }
+
   async function changeAlertStatus(id: string, status: "acknowledged" | "resolved") {
     try {
       await api.updateAlert(id, status);
@@ -193,7 +225,7 @@ export default function App() {
         {view === "overview" && <Overview events={events} total={total} counts={counts} scans={scans} busy={busy} health={health} onNavigate={navigate} onStart={startScan} onAddSample={addSample} />}
         {view === "events" && <EventsView events={events} total={total} search={search} severity={severity} setSearch={setSearch} setSeverity={setSeverity} onRefresh={() => void refresh()} />}
         {view === "alerts" && <AlertsView alerts={alerts} onChangeStatus={changeAlertStatus} onRefresh={() => void refresh()} />}
-        {view === "host" && <HostView scan={activeScan?.scan_type === "system" ? activeScan : scans.find((scan) => scan.scan_type === "system") ?? null} scans={scans} busy={busy} onStart={() => void startScan("system")} />}
+        {view === "host" && <HostView scan={activeScan?.scan_type === "system" ? activeScan : scans.find((scan) => scan.scan_type === "system") ?? null} scans={scans} busy={busy} onStart={() => void startScan("system")} onDeleteScan={(id) => void deleteHostScan(id)} onClearHistory={() => void clearHostScanHistory()} />}
         {view === "network" && <NetworkView networks={networks} selected={selectedNetwork} setSelected={setSelectedNetwork} scan={activeScan?.scan_type === "network" ? activeScan : scans.find((scan) => scan.scan_type === "network") ?? null} scans={scans} busy={busy} onStart={() => void startScan("network")} onReload={() => void loadNetworks()} />}
       </main>
     </div>
@@ -344,7 +376,12 @@ function ScanHeader({ scan }: { scan: ScanRecord | null }) {
   if (!scan) return <div className="scan-placeholder">No assessment results are available. Start a scan to collect local inventory.</div>;
   return <div className="scan-summary"><div><span className="eyebrow">SCAN JOB / {scan.id.slice(0, 8).toUpperCase()}</span><strong>{scan.target}</strong><small>Started {formatDate(scan.started_at)}{scan.completed_at ? ` · Completed ${formatDate(scan.completed_at)}` : ""}</small></div><span className={`scan-state ${scan.status}`}>{statusLabel(scan.status)}</span></div>;
 }
-function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; scans: ScanRecord[]; busy: boolean; onStart: () => void }) {
+function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: {
+  scan: ScanRecord | null; scans: ScanRecord[]; busy: boolean; onStart: () => void;
+  onDeleteScan: (id: string) => void; onClearHistory: () => void;
+}) {
+  const hostScans = scans.filter((item) => item.scan_type === "system");
+  const deletableHostScans = hostScans.filter((item) => item.status === "completed" || item.status === "failed");
   const result = asObject(scan?.result);
   const memory = asObject(result.memory); const disk = asObject(result.disk);
   const interfaces = asArray<{name?: string; address?: string; netmask?: string}>(result.interfaces);
@@ -382,7 +419,21 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
       <ActionButton onClick={onStart} disabled={busy}>↻ Run assessment</ActionButton>
     </PageHeading>
     <div className="scope-note host-scope"><span className="scope-mark">i</span><p>This performs a bounded, read-only local assessment: host inventory, SHA-256 file hashing against local indicators and an optional live MalwareBazaar feed, static script-pattern review and selected security-configuration checks. Suspicious files are never executed, changed, quarantined or uploaded. File-count, size and time limits apply; a clean result does not prove the system is malware-free.</p></div>
-    <section className="panel full-panel scan-panel"><div className="panel-title"><div><div className="eyebrow">ASSESSMENT STATUS</div><h2>Latest host inventory</h2></div><span className="section-note">{scans.filter((item) => item.scan_type === "system").length} TOTAL RUNS</span></div><ScanHeader scan={scan} />
+    <section className="panel full-panel scan-panel"><div className="panel-title"><div><div className="eyebrow">ASSESSMENT STATUS</div><h2>Latest host inventory</h2></div><span className="section-note">{hostScans.length} TOTAL RUNS</span></div><ScanHeader scan={scan} />
+      <section className="host-history" aria-label="Previous host assessment results">
+        <div className="result-heading"><div><h3>Previous scan history</h3><span>{hostScans.length} SAVED RESULTS</span></div>
+          <button className="button button-danger" onClick={onClearHistory} disabled={deletableHostScans.length === 0}>Clear completed history</button>
+        </div>
+        {hostScans.length === 0 ? <div className="empty-state">No previous host assessment results.</div> : hostScans.map((item) => (
+          <div className="host-history-row" key={item.id}>
+            <div className="host-history-info"><strong>{item.target}</strong><small>{formatDate(item.started_at)} · {statusLabel(item.status)}</small></div>
+            {item.status === "running" || item.status === "queued"
+              ? <span className="history-protected">ACTIVE</span>
+              : <button className="text-action history-delete" onClick={() => onDeleteScan(item.id)} aria-label={`Delete host scan from ${formatDate(item.started_at)}`}>DELETE RESULT</button>}
+          </div>
+        ))}
+        <p className="history-note">Deleting a result removes only its saved host scan record. It does not modify scanned files or affect network scans, alerts, cases, or evidence.</p>
+      </section>
       {isAssessing && <section className="live-assessment" aria-live="polite">
         <div className="result-heading"><h3>Live assessment activity</h3><span className="scan-state running">{progressPhase.toUpperCase()}</span></div>
         <div className="resource-grid">
