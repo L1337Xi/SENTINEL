@@ -231,6 +231,12 @@ def respond_to_host_finding(scan_id: str, finding_id: str, payload: dict) -> dic
     finding = _get_scan_finding(scan_id, finding_id)
     action = str(payload.get("action", ""))
     try:
+        analysis = investigate_file(str(finding["path"]), str(finding["sha256"]))
+        if analysis["assessment"]["verdict"] == "likely_false_positive":
+            raise HTTPException(
+                status_code=409,
+                detail="Package-integrity evidence supports a likely false positive. SENTINEL will not quarantine or delete this file.",
+            )
         if action == "quarantine":
             result = quarantine_file(str(finding["path"]), str(finding["sha256"]))
         elif action == "delete":
