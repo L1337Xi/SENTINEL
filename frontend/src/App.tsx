@@ -33,6 +33,13 @@ function asArray<T>(value: unknown): T[] { return Array.isArray(value) ? value a
 function statusLabel(status: ScanRecord["status"]): string {
   return status === "completed" ? "Complete" : status === "failed" ? "Failed" : status === "running" ? "Running" : "Queued";
 }
+function downloadJson(filename: string, value: unknown) {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url; anchor.download = filename; anchor.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function App() {
   const [view, setView] = useState<View>("home");
@@ -324,6 +331,10 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
   const listeners = asArray<{process?: string; address?: string; port?: number | string; pid?: number | string}>(result.listening_services);
   const localNetworks = asArray<{interface?: string; network?: string; address?: string}>(result.local_networks);
   const done = scan?.status === "completed";
+  const assessment = asObject(result.security_assessment);
+  const assessmentSummary = asObject(assessment.summary);
+  const findings = asArray<Record<string, unknown>>(assessment.findings);
+  const capabilities = asArray<Record<string, unknown>>(assessment.script_capabilities);
 
   const processRows = processes.map((item) => (
     <div className="simple-row" key={String(item.pid)}>
@@ -337,7 +348,7 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
     <PageHeading eyebrow="ASSESSMENT / LOCAL HOST" title="Host assessment" description="Read-only inventory of the machine running the SENTINEL backend.">
       <ActionButton onClick={onStart} disabled={busy}>↻ Run assessment</ActionButton>
     </PageHeading>
-    <div className="scope-note host-scope"><span className="scope-mark">i</span><p>This collects system metadata, resource usage, process names, listening sockets and network interfaces. It does not inspect file contents, remove malware or change system settings. Process visibility depends on the permissions used to run the backend.</p></div>
+    <div className="scope-note host-scope"><span className="scope-mark">i</span><p>This performs a bounded, read-only local assessment: host inventory, SHA-256 file hashing against operator-supplied local indicators, static script-pattern review and selected security-configuration checks. Suspicious files are never executed, changed, quarantined or uploaded. File-count, size and time limits apply; a clean result does not prove the system is malware-free.</p></div>
     <section className="panel full-panel scan-panel"><div className="panel-title"><div><div className="eyebrow">ASSESSMENT STATUS</div><h2>Latest host inventory</h2></div><span className="section-note">{scans.filter((item) => item.scan_type === "system").length} TOTAL RUNS</span></div><ScanHeader scan={scan} />
       {scan?.status === "failed" && <div className="scan-error">{scan.error ?? "The assessment failed."}</div>}
       {done && <div className="host-results">
@@ -364,6 +375,31 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
         <div className="result-section"><div className="result-heading"><h3>Listening services</h3><span>{listeners.length} SOCKETS</span></div><div className="simple-table">{listeners.length === 0 ? (<div className="empty-state">No listening services were visible to the scanner.</div>) : (listeners.map((item, index) => <div className="simple-row" key={index}><strong>{String(item.process ?? "Unknown process")}</strong><span>{String(item.address)}:{String(item.port)}</span><small>PID {String(item.pid ?? "—")}</small></div>))}</div></div>
 
         <div className="result-section"><div className="result-heading"><h3>Process inventory</h3><span>{processes.length} DISPLAYED / {result.process_count ?? "—"} TOTAL</span></div><div className="simple-table process-list">{processes.length === 0 ? <div className="empty-state">No processes were visible to the scanner.</div> : processRows}</div></div>
+
+        {assessmentSummary.files_hashed !== undefined && <div className="result-section">
+          <div className="result-heading"><h3>Security assessment report</h3><button className="button button-secondary" onClick={() => downloadJson(`sentinel-host-report-${scan?.id ?? "latest"}.json`, { scan, security_assessment: assessment })}>Export JSON report ↓</button></div>
+          <div className="resource-grid">
+            <Resource label="FILES HASHED" value={String(assessmentSummary.files_hashed ?? 0)} detail={`${String(assessmentSummary.files_seen ?? 0)} files visited`} />
+            <Resource label="MALWARE MATCHES" value={String(assessmentSummary.malware_matches ?? 0)} detail="Exact local SHA-256 indicators" />
+            <Resource label="CONFIG FINDINGS" value={String(assessmentSummary.configuration_findings ?? 0)} detail="Review required; not all are vulnerabilities" />
+            <Resource label="SCAN STATUS" value={assessmentSummary.truncated ? "LIMIT REACHED" : "COMPLETED"} detail={assessmentSummary.truncated ? "File or time budget reached" : "Configured scan scope completed"} />
+          </div>
+          <div className="simple-table">
+            {findings.length === 0 ? <div className="empty-state">No configured hash matches or flagged configuration items were found in the scanned scope. This is not a guarantee that the host is clean.</div> :
+              findings.map((finding, index) => <article className="simple-row" key={String(finding.id ?? index)} style={{gridTemplateColumns:"auto 1fr", alignItems:"start"}}>
+                <span className={`severity-badge ${String(finding.severity ?? "low")}`}>{String(finding.severity ?? "info").toUpperCase()}</span>
+                <div><strong>{String(finding.title ?? "Assessment finding")}</strong><small>{String(finding.category ?? "finding")} · {String(finding.path ?? finding.evidence ?? "Local configuration")}</small><p>{String(finding.description ?? "Review the evidence before taking action.")}</p>{finding.sha256 && <small>SHA-256: {String(finding.sha256)}</small>}</div>
+              </article>)}
+          </div>
+          {capabilities.length > 0 && <div className="result-section">
+            <div className="result-heading"><h3>Static capability indicators</h3><span>INFERRED FROM SCRIPT TEXT · LOW CONFIDENCE</span></div>
+            <div className="simple-table">{capabilities.map((item, index) => <div className="simple-row" key={String(item.path) + String(item.id) + index} style={{gridTemplateColumns:"1fr 1fr"}}>
+              <strong>{String(item.label)}</strong><span>{String(item.path)}</span><small>Inferred · low confidence</small>
+            </div>)}</div>
+            <div className="scope-note"><span className="scope-mark">i</span><p>These are static indicators only. They do not prove the script ran or performed the described action. SENTINEL does not execute samples to observe behaviour.</p></div>
+          </div>}
+          {asArray<string>(assessment.limitations).length > 0 && <div className="scope-note"><span className="scope-mark">i</span><p>{asArray<string>(assessment.limitations).join(" ")}</p></div>}
+        </div>}
       </div>}
     </section>
   </>;
