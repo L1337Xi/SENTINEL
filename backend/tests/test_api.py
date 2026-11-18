@@ -1,9 +1,9 @@
 import pytest
+from fastapi.testclient import TestClient
 
 from app import database
 from app.main import app
 from app.scanner import validate_local_network
-from fastapi.testclient import TestClient
 
 
 def test_health():

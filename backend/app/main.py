@@ -6,13 +6,19 @@ import sqlite3
 from datetime import UTC, datetime
 from uuid import uuid4
 
-import psutil
-
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+import psutil
 
 from .config import CORS_ORIGINS, MAX_PAGE_SIZE
-from .database import create_scan, initialize_database, row_to_event, row_to_scan, session, update_scan
+from .database import (
+    create_scan,
+    initialize_database,
+    row_to_event,
+    row_to_scan,
+    session,
+    update_scan,
+)
 from .scanner import network_discovery, system_inventory, validate_local_network
 from .schemas import EventCreate, EventPage, NetworkScanCreate
 
