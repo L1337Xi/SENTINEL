@@ -171,20 +171,99 @@ def _privileged_account_inventory() -> dict[str, Any]:
 
 
 def _security_posture() -> dict[str, Any]:
+    """Inspect host INPUT policy without mistaking Docker forwarding/NAT rules for a host firewall."""
     checks: list[dict[str, str]] = []
-    firewall_tools = [name for name in ("ufw", "firewall-cmd", "nft", "iptables") if shutil.which(name)]
-    firewall_active = False
-    if shutil.which("ufw"):
+    firewall_tools = [
+        name for name in ("ufw", "firewall-cmd", "nft", "iptables")
+        if shutil.which(name)
+    ]
+    evidence: list[str] = []
+    ufw_active = False
+    nft_input_default_deny = False
+    nft_input_filter_rules = False
+    iptables_input_default_deny = False
+    iptables_input_filter_rules = False
+    inspected = False
+
+    def read_command(args: list[str]) -> str:
         try:
-            firewall_active = os.path.exists("/etc/ufw/ufw.conf") and "ENABLED=yes" in Path("/etc/ufw/ufw.conf").read_text(errors="ignore")
-        except OSError:
-            firewall_active = False
-    if firewall_active:
-        checks.append({"id": "firewall", "severity": "info", "status": "enabled", "title": "UFW firewall enabled", "evidence": "UFW configuration reports ENABLED=yes"})
-    elif firewall_tools:
-        checks.append({"id": "firewall", "severity": "medium", "status": "review", "title": "Firewall state needs verification", "evidence": "Firewall tooling is present, but an enabled state was not confirmed"})
+            completed = subprocess.run(
+                args, capture_output=True, text=True, timeout=5, check=False
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+        if completed.returncode == 0:
+            return completed.stdout
+        return ""
+
+    if shutil.which("ufw"):
+        output = read_command(["ufw", "status"])
+        if output:
+            inspected = True
+            status = re.search(r"^Status:\s*(active|inactive)\s*$", output, re.MULTILINE | re.IGNORECASE)
+            if status and status.group(1).lower() == "active":
+                ufw_active = True
+                evidence.append("UFW reports Status: active")
+            elif status:
+                evidence.append("UFW reports Status: inactive")
+
+    if shutil.which("nft"):
+        output = read_command(["nft", "-n", "list", "ruleset"])
+        if output:
+            inspected = True
+            # Only inspect base chains attached to the host INPUT hook. Docker's
+            # NAT and FORWARD chains are deliberately not treated as host protection.
+            for match in re.finditer(r"\bchain\s+([^\s{]+)\s*\{([^}]*)\}", output, re.DOTALL):
+                body = match.group(2)
+                if not re.search(r"\bhook\s+input\b", body):
+                    continue
+                policy = re.search(r"\bpolicy\s+(drop|reject|accept)\b", body)
+                if policy and policy.group(1) in {"drop", "reject"}:
+                    nft_input_default_deny = True
+                    evidence.append(f"nftables INPUT base chain {match.group(1)} has policy {policy.group(1)}")
+                if re.search(r"\b(drop|reject)\b", body):
+                    nft_input_filter_rules = True
+                    evidence.append(f"nftables INPUT base chain {match.group(1)} contains drop/reject rules")
+
+    if shutil.which("iptables"):
+        output = read_command(["iptables", "-S", "INPUT"])
+        if output:
+            inspected = True
+            policy = re.search(r"^-P\s+INPUT\s+(DROP|REJECT|ACCEPT)\s*$", output, re.MULTILINE)
+            if policy and policy.group(1) in {"DROP", "REJECT"}:
+                iptables_input_default_deny = True
+                evidence.append(f"iptables INPUT default policy is {policy.group(1)}")
+            if re.search(r"^-A\s+INPUT\b.*\s-j\s+(DROP|REJECT)\b", output, re.MULTILINE):
+                iptables_input_filter_rules = True
+                evidence.append("iptables INPUT chain contains explicit DROP/REJECT rules")
+
+    if ufw_active or nft_input_default_deny or iptables_input_default_deny:
+        checks.append({
+            "id": "firewall", "severity": "info", "status": "enabled",
+            "title": "Host inbound firewall policy detected",
+            "evidence": "; ".join(evidence) or "A host INPUT default-deny policy was detected",
+        })
+    elif nft_input_filter_rules or iptables_input_filter_rules:
+        checks.append({
+            "id": "firewall", "severity": "medium", "status": "partial",
+            "title": "Host firewall rules detected; default policy needs review",
+            "evidence": "; ".join(evidence) or "Explicit INPUT filtering rules were detected",
+        })
+    elif inspected:
+        checks.append({
+            "id": "firewall", "severity": "medium", "status": "inactive",
+            "title": "Host inbound firewall protection not confirmed",
+            "evidence": "; ".join(evidence) or (
+                "No active UFW policy or INPUT default-deny policy was detected. "
+                "Docker NAT/FORWARD rules do not establish host INPUT protection."
+            ),
+        })
     else:
-        checks.append({"id": "firewall", "severity": "high", "status": "unknown", "title": "No supported firewall tool found", "evidence": "ufw, firewalld, nftables and iptables commands were not found"})
+        checks.append({
+            "id": "firewall", "severity": "info", "status": "unknown",
+            "title": "Host firewall state could not be assessed",
+            "evidence": "No supported firewall command returned inspectable rules or status",
+        })
 
     ssh_path = Path("/etc/ssh/sshd_config")
     if ssh_path.is_file():
@@ -201,7 +280,6 @@ def _security_posture() -> dict[str, Any]:
         except OSError:
             checks.append({"id": "ssh-root-login", "severity": "info", "status": "not-assessed", "title": "SSH configuration unreadable", "evidence": "Permission denied or file unavailable"})
     return {"checks": checks, "firewall_tools": firewall_tools}
-
 
 def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
                         max_file_bytes: int = MAX_FILE_BYTES,
