@@ -156,6 +156,43 @@ def create_scan(scan_id: str, scan_type: str, target: str, started_at: str) -> N
         )
 
 
+def delete_system_scan(scan_id: str, deleted_at: str) -> dict | None:
+    """Delete one completed/failed host scan while retaining an audit record."""
+    with session() as connection:
+        row = connection.execute(
+            "SELECT * FROM scans WHERE id = ?", (scan_id,)
+        ).fetchone()
+        if row is None or row["scan_type"] != "system" or row["status"] in {"queued", "running"}:
+            return None
+        snapshot = dict(row)
+        append_audit(
+            connection, "scan", scan_id, "scan.deleted", deleted_at,
+            {"scan_type": row["scan_type"], "status": row["status"],
+             "target": row["target"], "started_at": row["started_at"]},
+        )
+        connection.execute("DELETE FROM scans WHERE id = ?", (scan_id,))
+        return snapshot
+
+
+def delete_completed_system_scans(deleted_at: str) -> int:
+    """Clear completed/failed host scan history only; active and network scans remain."""
+    with session() as connection:
+        rows = connection.execute(
+            "SELECT id, status, target, started_at FROM scans "
+            "WHERE scan_type = 'system' AND status IN ('completed', 'failed')"
+        ).fetchall()
+        if not rows:
+            return 0
+        append_audit(
+            connection, "scan", "system", "scan.history_cleared", deleted_at,
+            {"deleted_count": len(rows)},
+        )
+        connection.execute(
+            "DELETE FROM scans WHERE scan_type = 'system' AND status IN ('completed', 'failed')"
+        )
+        return len(rows)
+
+
 def update_scan(
     scan_id: str, *, status: str, result: dict | None = None,
     error: str | None = None, completed_at: str | None = None,
