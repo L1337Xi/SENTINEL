@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import pwd
+import grp
 import re
 import shutil
 import stat
@@ -118,6 +120,54 @@ def _severity_for_mode(mode: int) -> str | None:
     if mode & stat.S_IWOTH:
         return "medium"
     return None
+
+
+def _persistence_inventory() -> list[dict[str, str]]:
+    """Inventory common Linux startup locations without executing or changing entries."""
+    roots = [
+        Path("/etc/systemd/system"), Path("/usr/lib/systemd/system"),
+        Path("/lib/systemd/system"), Path("/etc/cron.d"), Path("/etc/cron.daily"),
+        Path("/etc/cron.hourly"), Path("/etc/cron.weekly"), Path("/etc/cron.monthly"),
+        Path("/etc/xdg/autostart"), Path("/etc/init.d"),
+    ]
+    entries: list[dict[str, str]] = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        try:
+            for item in sorted(root.iterdir()):
+                if item.is_file() or item.is_symlink():
+                    entries.append({"path": str(item), "category": root.name,
+                                    "type": "symlink" if item.is_symlink() else "file"})
+                if len(entries) >= 1000:
+                    return entries
+        except OSError:
+            continue
+    try:
+        for home in Path("/home").iterdir():
+            for item in (home / ".config" / "autostart").glob("*.desktop"):
+                entries.append({"path": str(item), "category": "user-autostart", "type": "file"})
+                if len(entries) >= 1000:
+                    return entries
+    except OSError:
+        pass
+    return entries
+
+
+def _privileged_account_inventory() -> dict[str, Any]:
+    uid_zero = []
+    for account in pwd.getpwall():
+        if account.pw_uid == 0:
+            uid_zero.append({"username": account.pw_name, "uid": account.pw_uid,
+                             "home": account.pw_dir, "shell": account.pw_shell})
+    privileged_groups = []
+    for group_name in ("sudo", "wheel", "admin"):
+        try:
+            group = grp.getgrnam(group_name)
+        except KeyError:
+            continue
+        privileged_groups.append({"group": group_name, "members": sorted(set(group.gr_mem))})
+    return {"uid_zero_accounts": uid_zero, "privileged_groups": privileged_groups}
 
 
 def _security_posture() -> dict[str, Any]:
@@ -230,6 +280,8 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
     clamav = _clamav_scan(root_path)
     findings.extend(clamav["findings"])
     posture = _security_posture()
+    persistence = _persistence_inventory()
+    accounts = _privileged_account_inventory()
     findings.extend({
         "id": check["id"], "category": "configuration", "severity": check["severity"],
         "title": check["title"], "description": check["evidence"],
@@ -252,6 +304,8 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
         "findings": findings,
         "script_capabilities": capabilities,
         "security_posture": posture,
+        "persistence_inventory": persistence,
+        "privileged_accounts": accounts,
         "malware_engines": {"clamav": {key: value for key, value in clamav.items() if key != "findings"}},
         "threat_intelligence": {
             "source": os.environ.get("SENTINEL_HASH_DB", "/etc/sentinel/hash_iocs.json"),
