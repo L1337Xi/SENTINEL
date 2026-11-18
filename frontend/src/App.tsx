@@ -319,10 +319,20 @@ function ScanHeader({ scan }: { scan: ScanRecord | null }) {
 function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; scans: ScanRecord[]; busy: boolean; onStart: () => void }) {
   const result = asObject(scan?.result);
   const memory = asObject(result.memory); const disk = asObject(result.disk);
-  const interfaces = asArray<Record<string, unknown>>(result.interfaces);
-  const processes = asArray<Record<string, unknown>>(result.processes);
-  const listeners = asArray<Record<string, unknown>>(result.listening_services);
+  const interfaces = asArray<{name?: string; address?: string; netmask?: string}>(result.interfaces);
+  const processes = asArray<{pid?: number; name?: string; user?: string; status?: string}>(result.processes);
+  const listeners = asArray<{process?: string; address?: string; port?: number | string; pid?: number | string}>(result.listening_services);
+  const localNetworks = asArray<{interface?: string; network?: string; address?: string}>(result.local_networks);
   const done = scan?.status === "completed";
+
+  const processRows = processes.map((item) => (
+    <div className="simple-row" key={String(item.pid)}>
+      <strong>{String(item.name)}</strong>
+      <span>PID {String(item.pid)}</span>
+      <small>{String(item.user ?? "—")} · {String(item.status ?? "—")}</small>
+    </div>
+  ));
+
   return <>
     <PageHeading eyebrow="ASSESSMENT / LOCAL HOST" title="Host assessment" description="Read-only inventory of the machine running the SENTINEL backend.">
       <ActionButton onClick={onStart} disabled={busy}>↻ Run assessment</ActionButton>
@@ -332,15 +342,28 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
       {scan?.status === "failed" && <div className="scan-error">{scan.error ?? "The assessment failed."}</div>}
       {done && <div className="host-results">
         <div className="host-identity"><div className="host-initial">H</div><div><strong>{String(result.hostname ?? "Unknown host")}</strong><small>{String(result.operating_system ?? "Operating system unavailable")}</small></div></div>
+
+        <div className="host-meta-grid">
+          <div className="meta-card"><span className="meta-label">KERNEL</span><strong>{String(result.kernel ?? "—")}</strong></div>
+          <div className="meta-card"><span className="meta-label">ARCHITECTURE</span><strong>{String(result.architecture ?? "—")}</strong></div>
+          <div className="meta-card"><span className="meta-label">PROCESSOR</span><strong>{String(result.processor ?? "Not reported")}</strong></div>
+          <div className="meta-card"><span className="meta-label">COLLECTED</span><strong>{formatDate(result.collected_at as string)}</strong></div>
+        </div>
+
         <div className="resource-grid">
           <Resource label="CPU CORES" value={String(result.cpu_cores ?? "—")} detail={`${String(result.logical_processors ?? "—")} logical processors`} />
-          <Resource label="MEMORY" value={bytes(Number(memory.total_bytes))} detail={`${String(memory.used_percent ?? "—")}% utilised`} />
-          <Resource label="ROOT DISK" value={bytes(Number(disk.total_bytes))} detail={`${String(disk.used_percent ?? "—")}% utilised`} />
-          <Resource label="PROCESSES" value={String(result.process_count ?? "—")} detail={result.processes_truncated ? "First 100 displayed" : "Visible processes"} />
+          <Resource label="MEMORY" value={bytes(Number(memory.total_bytes))} detail={`Used ${String(memory.used_percent ?? "—")}% · Avail ${bytes(Number(memory.available_bytes))}`} />
+          <Resource label="ROOT DISK" value={bytes(Number(disk.total_bytes))} detail={`Used ${String(disk.used_percent ?? "—")}% · Free ${bytes(Number(disk.free_bytes))}`} />
+          <Resource label="PROCESSES" value={String(result.process_count ?? "—")} detail={result.processes_truncated ? "First 100 displayed" : "All visible"} />
         </div>
+
         <div className="result-section"><div className="result-heading"><h3>Network interfaces</h3><span>{interfaces.length} INTERFACES</span></div><div className="simple-table">{interfaces.map((item, index) => <div className="simple-row" key={index}><strong>{String(item.name)}</strong><span>{String(item.address)}</span><small>{String(item.netmask ?? "—")}</small></div>)}</div></div>
-        <div className="result-section"><div className="result-heading"><h3>Listening services</h3><span>{listeners.length} SOCKETS</span></div><div className="simple-table">{listeners.slice(0, 30).map((item, index) => <div className="simple-row" key={index}><strong>{String(item.process ?? "Unknown process")}</strong><span>{String(item.address)}:{String(item.port)}</span><small>PID {String(item.pid ?? "—")}</small></div>)}{listeners.length === 0 && <div className="empty-state">No listening services were visible to the scanner.</div>}</div></div>
-        <div className="result-section"><div className="result-heading"><h3>Process inventory</h3><span>{processes.length} DISPLAYED</span></div><div className="simple-table process-list">{processes.slice(0, 40).map((item) => <div className="simple-row" key={String(item.pid)}><strong>{String(item.name)}</strong><span>PID {String(item.pid)}</span><small>{String(item.user ?? "—")}</small></div>)}</div></div>
+
+        {localNetworks.length > 0 && <div className="result-section"><div className="result-heading"><h3>Local private networks</h3><span>{localNetworks.length} NETWORKS</span></div><div className="simple-table">{localNetworks.map((item, index) => <div className="simple-row" key={index}><strong>{String(item.interface)}</strong><span>{String(item.network)}</span><small>{String(item.address)}</small></div>)}</div></div>}
+
+        <div className="result-section"><div className="result-heading"><h3>Listening services</h3><span>{listeners.length} SOCKETS</span></div><div className="simple-table">{listeners.length === 0 ? (<div className="empty-state">No listening services were visible to the scanner.</div>) : (listeners.map((item, index) => <div className="simple-row" key={index}><strong>{String(item.process ?? "Unknown process")}</strong><span>{String(item.address)}:{String(item.port)}</span><small>PID {String(item.pid ?? "—")}</small></div>))}</div></div>
+
+        <div className="result-section"><div className="result-heading"><h3>Process inventory</h3><span>{processes.length} DISPLAYED / {result.process_count ?? "—"} TOTAL</span></div><div className="simple-table process-list">{processes.length === 0 ? <div className="empty-state">No processes were visible to the scanner.</div> : processRows}</div></div>
       </div>}
     </section>
   </>;
