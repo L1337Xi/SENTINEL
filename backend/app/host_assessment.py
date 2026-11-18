@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import stat
+import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -67,6 +68,46 @@ def _script_capabilities(path: Path) -> list[dict[str, str]]:
         if re.search(pattern, sample, flags=re.IGNORECASE):
             found.append({"id": key, "label": label, "basis": "static_script_pattern", "confidence": "low"})
     return found
+
+
+def _clamav_scan(root: Path, timeout: int = 90) -> dict[str, Any]:
+    """Use an already-installed ClamAV scanner; never install or update signatures."""
+    executable = shutil.which("clamscan")
+    if not executable:
+        return {"available": False, "executed": False, "findings": [],
+                "note": "ClamAV is not installed; SENTINEL did not install it."}
+    try:
+        version = subprocess.run([executable, "--version"], capture_output=True, text=True,
+                                 timeout=5, check=False).stdout.strip()[:200]
+        completed = subprocess.run(
+            [executable, "--recursive", "--infected", "--no-summary",
+             "--max-filesize=64M", "--max-scansize=2G",
+             "--exclude-dir=^/(proc|sys|dev|run|var/cache|var/tmp)(/|$)", str(root)],
+            capture_output=True, text=True, timeout=timeout, check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {"available": True, "executed": True, "version": version if "version" in locals() else None,
+                "findings": [], "timed_out": True,
+                "note": f"ClamAV exceeded its {timeout}-second time limit; results are incomplete."}
+    except OSError as exc:
+        return {"available": True, "executed": False, "findings": [],
+                "note": f"ClamAV could not be started: {str(exc)[:200]}"}
+
+    detections = []
+    for line in completed.stdout.splitlines():
+        if line.endswith(" FOUND"):
+            file_path, signature = line.rsplit(": ", 1)
+            detections.append({
+                "id": f"clamav-{hashlib.sha256(line.encode()).hexdigest()[:12]}",
+                "category": "malware", "severity": "high",
+                "title": signature.removesuffix(" FOUND"),
+                "description": "ClamAV signature detection. Treat as a strong lead and preserve the sample for controlled analysis.",
+                "path": file_path, "evidence": line, "confidence": "high",
+                "source": "clamav", "engine": "ClamAV",
+            })
+    return {"available": True, "executed": True, "version": version,
+            "return_code": completed.returncode, "findings": detections,
+            "note": "ClamAV ran locally with existing signatures; no signature update or network lookup was performed."}
 
 
 def _severity_for_mode(mode: int) -> str | None:
@@ -186,6 +227,8 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
         if truncated:
             break
 
+    clamav = _clamav_scan(root_path)
+    findings.extend(clamav["findings"])
     posture = _security_posture()
     findings.extend({
         "id": check["id"], "category": "configuration", "severity": check["severity"],
@@ -209,6 +252,7 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
         "findings": findings,
         "script_capabilities": capabilities,
         "security_posture": posture,
+        "malware_engines": {"clamav": {key: value for key, value in clamav.items() if key != "findings"}},
         "threat_intelligence": {
             "source": os.environ.get("SENTINEL_HASH_DB", "/etc/sentinel/hash_iocs.json"),
             "local_indicators_loaded": len(indicators),
