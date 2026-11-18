@@ -61,7 +61,8 @@ export default function App() {
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [alerts, setAlerts] = useState<AlertRecord[]>([]);
   const [total, setTotal] = useState(0);
-  const [health, setHealth] = useState<"checking" | "online" | "offline">("checking");\n  const [edition, setEdition] = useState<EditionManifest | null>(null);
+  const [health, setHealth] = useState<"checking" | "online" | "offline">("checking");
+  const [edition, setEdition] = useState<EditionManifest | null>(null);
   const [search, setSearch] = useState("");
   const [severity, setSeverity] = useState("");
   const [busy, setBusy] = useState(false);
@@ -74,7 +75,8 @@ export default function App() {
   const refresh = useCallback(async () => {
     try {
       const [status, page, history, alertPage, editionInfo] = await Promise.all([api.health(), api.events({ search: search.trim(), severity }), api.scans(), api.alerts(), api.edition()]);
-      setHealth(status.status === "ok" ? "online" : "offline");\n      setEdition(editionInfo);
+      setHealth(status.status === "ok" ? "online" : "offline");
+      setEdition(editionInfo);
       setEvents(page.items); setTotal(page.total); setScans(history.items); setAlerts(alertPage.items); setError("");
       setActiveScan((current) => {
         if (current && ["queued", "running"].includes(current.status)) return current;
