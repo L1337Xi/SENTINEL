@@ -10,6 +10,7 @@ import json
 import os
 import re
 import time
+import threading
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -46,7 +47,7 @@ def _read_cache() -> dict:
 
 def _write_cache(cache: dict) -> None:
     path = _cache_path()
-    temporary = path.with_name(path.name + ".tmp")
+    temporary = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary.write_text(json.dumps(cache, separators=(",", ":"), sort_keys=True), encoding="utf-8")
@@ -105,7 +106,7 @@ def fetch_recent_malware(*, force_refresh: bool = False) -> dict:
         status = payload.get("query_status") if isinstance(payload, dict) else None
         return _stale_or_error(cached, str(status or "invalid_response")[:80])
 
-    records = payload.get("data", [])
+    records = payload.get("data") or []
     if not isinstance(records, list):
         return _stale_or_error(cached, "invalid_response")
     entries = []
