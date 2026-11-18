@@ -338,6 +338,10 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
   const malwareFindings = findings.filter((finding) => finding.category === "malware");
   const malwareEngines = asObject(assessment.malware_engines);
   const clamav = asObject(malwareEngines.clamav);
+  const persistence = asArray<Record<string, unknown>>(assessment.persistence_inventory);
+  const privilegedAccounts = asObject(assessment.privileged_accounts);
+  const uidZeroAccounts = asArray<Record<string, unknown>>(privilegedAccounts.uid_zero_accounts);
+  const privilegedGroups = asArray<Record<string, unknown>>(privilegedAccounts.privileged_groups);
 
   const processRows = processes.map((item) => (
     <div className="simple-row" key={String(item.pid)}>
@@ -394,6 +398,25 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
                 <span className={`severity-badge ${String(finding.severity ?? "low")}`}>{String(finding.severity ?? "info").toUpperCase()}</span>
                 <div><strong>{String(finding.title ?? "Assessment finding")}</strong><small>{String(finding.category ?? "finding")} · {String(finding.path ?? finding.evidence ?? "Local configuration")}</small><p>{String(finding.description ?? "Review the evidence before taking action.")}</p>{typeof finding.sha256 === "string" && <small>SHA-256: {finding.sha256}</small>}</div>
               </article>)}
+          </div>
+          <div className="result-section">
+            <div className="result-heading"><h3>Persistence inventory</h3><span>{persistence.length} STARTUP ENTRIES</span></div>
+            <div className="simple-table">{persistence.length === 0 ? <div className="empty-state">No entries were visible in the inspected startup locations.</div> : persistence.map((item, index) => <div className="simple-row" key={String(item.path) + index} style={{gridTemplateColumns:"1fr auto"}}>
+              <strong>{String(item.path)}</strong><small>{String(item.category)} · {String(item.type)}</small>
+            </div>)}</div>
+          </div>
+          <div className="result-section">
+            <div className="result-heading"><h3>Privileged account review</h3><span>{uidZeroAccounts.length} UID 0 ACCOUNTS</span></div>
+            <div className="simple-table">
+              {uidZeroAccounts.map((item, index) => <div className="simple-row" key={String(item.username) + index} style={{gridTemplateColumns:"1fr 1fr"}}>
+                <strong>{String(item.username)}</strong><span>UID {String(item.uid)}</span><small>{String(item.shell)}</small>
+              </div>)}
+              {privilegedGroups.map((item, index) => <div className="simple-row" key={String(item.group) + index} style={{gridTemplateColumns:"1fr 1fr"}}>
+                <strong>{String(item.group)} group</strong><span>{asArray<string>(item.members).join(", ") || "No supplementary members listed"}</span>
+              </div>)}
+              {uidZeroAccounts.length === 0 && privilegedGroups.length === 0 && <div className="empty-state">Account details were unavailable.</div>}
+            </div>
+            <div className="scope-note"><span className="scope-mark">i</span><p>UID 0 and administrative group membership are inventory items for analyst review, not automatic proof of compromise.</p></div>
           </div>
           {malwareFindings.length > 0 && <div className="result-section">
             <div className="result-heading"><h3>Malware capability analysis</h3><span>STATIC EVIDENCE ONLY</span></div>
