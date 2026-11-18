@@ -210,6 +210,7 @@ def lookup_circl_hashes(
     for digest in selected:
         cached = circl_cache.get(digest)
         ttl = CIRCL_FOUND_CACHE_TTL if isinstance(cached, dict) and cached.get("status") == "found" else CIRCL_MISS_CACHE_TTL
+        was_cached = False
         if (
             isinstance(cached, dict) and isinstance(cached.get("checked_at"), (int, float))
             and now - cached["checked_at"] < ttl
@@ -217,6 +218,7 @@ def lookup_circl_hashes(
         ):
             result = cached
             cache_hits += 1
+            was_cached = True
         else:
             request = Request(
                 CIRCL_URL + digest,
@@ -266,7 +268,7 @@ def lookup_circl_hashes(
                 "product_name": result.get("product_name"),
                 "product_version": result.get("product_version"),
                 "checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(result["checked_at"])),
-                "cached": cache_hits > 0 and result is cached if "cached" in locals() else False,
+                "cached": was_cached,
             })
         else:
             misses += 1
