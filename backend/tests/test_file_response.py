@@ -1,6 +1,4 @@
 import hashlib
-import os
-
 import pytest
 
 from app import file_response
