@@ -1,8 +1,8 @@
 """Read-only local host security assessment.
 
 The scanner never executes discovered files, changes host settings, quarantines files,
-or sends telemetry off-host. Hash indicators are supplied by the operator in a local
-JSON file; no remote threat-intelligence feed is assumed.
+or uploads samples. Hash indicators may come from a local operator JSON file and an
+optional, bounded MalwareBazaar metadata feed; no file contents leave the host.
 """
 from __future__ import annotations
 
