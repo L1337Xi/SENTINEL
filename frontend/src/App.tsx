@@ -484,41 +484,78 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
     </section>
   </>;
 }
-function AssessmentFindingCharts({ findings }: { findings: Record<string, unknown>[] }) {
+function AssessmentFindingCharts({ findings, capabilities }: { findings: Record<string, unknown>[]; capabilities: Record<string, unknown>[] }) {
+  const [selectedSeverity, setSelectedSeverity] = useState("all");
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const severityLevels = ["critical", "high", "medium", "low"] as const;
-  const severityCounts = severityLevels.map((level) => ({
-    level,
-    count: findings.filter((finding) => String(finding.severity ?? "low").toLowerCase() === level).length,
-  }));
-  const maxSeverity = Math.max(1, ...severityCounts.map((item) => item.count));
-  const categoryCounts = Object.entries(findings.reduce<Record<string, number>>((counts, finding) => {
-    const category = String(finding.category ?? "other").replace(/_/g, " ");
-    counts[category] = (counts[category] ?? 0) + 1;
+  const categoryLabel = (value: unknown) => String(value ?? "other").replace(/_/g, " ").replace(/\\b\\w/g, (letter) => letter.toUpperCase());
+  const records = [
+    ...findings.map((finding, index) => {
+      const mapped = asArray<Record<string, unknown>>(finding.capabilities);
+      const categories = [...new Set([categoryLabel(finding.category), ...mapped.map((item) => categoryLabel(item.label ?? item.id))])];
+      return { id: String(finding.id ?? `finding-${index}`), title: String(finding.title ?? "Assessment finding"), severity: String(finding.severity ?? "low").toLowerCase(), path: String(finding.path ?? finding.evidence ?? "Local configuration"), description: String(finding.description ?? "Review the evidence."), categories, source: String(finding.source ?? "local assessment"), sha256: typeof finding.sha256 === "string" ? finding.sha256 : "" };
+    }),
+    ...capabilities.map((item, index) => ({
+      id: `static-${String(item.id ?? index)}-${String(item.path ?? index)}`,
+      title: String(item.label ?? item.id ?? "Static behaviour indicator"),
+      severity: "low",
+      path: String(item.path ?? "Path unavailable"),
+      description: "Static script-text indicator only. It does not prove execution or malicious intent.",
+      categories: [categoryLabel(item.label ?? item.id), "Static script indicator"],
+      source: "static script pattern",
+      sha256: "",
+    })),
+  ];
+  const categoryCounts = Object.entries(records.reduce<Record<string, number>>((counts, record) => {
+    record.categories.forEach((category) => { counts[category] = (counts[category] ?? 0) + 1; });
     return counts;
-  }, {})).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  }, {})).sort((a, b) => b[1] - a[1]);
+  const severityCounts = severityLevels.map((level) => ({ level, count: records.filter((record) => record.severity === level).length }));
+  const maxSeverity = Math.max(1, ...severityCounts.map((item) => item.count));
   const maxCategory = Math.max(1, ...categoryCounts.map((item) => item[1]));
-  const confirmed = findings.filter((finding) => finding.category === "malware").length;
+  const filtered = records.filter((record) =>
+    (selectedSeverity === "all" || record.severity === selectedSeverity) &&
+    (selectedCategory === "all" || record.categories.includes(selectedCategory))
+  );
+  const chooseCategory = (category: string) => setSelectedCategory((current) => current === category ? "all" : category);
   return (
-    <div className="finding-analytics" aria-label="Assessment finding charts">
+    <div className="finding-analytics" aria-label="Assessment finding charts and filters">
       <div className="finding-chart-card">
-        <div className="finding-chart-head"><div><span className="eyebrow">RISK PROFILE</span><h3>Findings by severity</h3></div><strong>{findings.length}<small> TOTAL</small></strong></div>
+        <div className="finding-chart-head"><div><span className="eyebrow">RISK PROFILE</span><h3>Findings by severity</h3></div><strong>{records.length}<small> RECORDS</small></strong></div>
+        <button className={`chart-filter-all ${selectedSeverity === "all" ? "active" : ""}`} onClick={() => setSelectedSeverity("all")}>All severities</button>
         {severityCounts.map((item) => (
-          <div className="severity-chart-row" key={item.level}>
+          <button className={`severity-chart-row chart-selectable ${selectedSeverity === item.level ? "selected" : ""}`} key={item.level} onClick={() => setSelectedSeverity((current) => current === item.level ? "all" : item.level)} aria-pressed={selectedSeverity === item.level}>
             <span className={`severity-badge ${item.level}`}>{item.level}</span>
-            <div className="chart-track"><div className={`chart-fill ${item.level}`} style={{ width: `${(item.count / maxSeverity) * 100}%` }} /></div>
+            <span className="chart-track"><span className={`chart-fill ${item.level}`} style={{ width: `${(item.count / maxSeverity) * 100}%` }} /></span>
             <strong>{item.count}</strong>
-          </div>
+          </button>
         ))}
-        <div className="chart-footnote">Severity reflects the assessment rule classification, not proof of compromise.</div>
+        <div className="chart-footnote">Select a severity to filter the evidence below. Static behaviour indicators are classified as low confidence, not confirmed malware.</div>
       </div>
       <div className="finding-chart-card">
-        <div className="finding-chart-head"><div><span className="eyebrow">FINDING DISTRIBUTION</span><h3>By detection category</h3></div><strong>{confirmed}<small> MALWARE</small></strong></div>
-        {categoryCounts.length === 0 ? <div className="chart-empty">No findings to chart.</div> : categoryCounts.map(([category, count]) => (
-          <div className="category-chart-row" key={category}>
-            <span>{category}</span><div className="chart-track"><div className="chart-fill category" style={{ width: `${(count / maxCategory) * 100}%` }} /></div><strong>{count}</strong>
-          </div>
+        <div className="finding-chart-head"><div><span className="eyebrow">BEHAVIOUR & FINDING CATEGORIES</span><h3>Investigate by category</h3></div><strong>{categoryCounts.length}<small> CATEGORIES</small></strong></div>
+        <button className={`chart-filter-all ${selectedCategory === "all" ? "active" : ""}`} onClick={() => setSelectedCategory("all")}>All categories</button>
+        {categoryCounts.length === 0 ? <div className="chart-empty">No findings or behaviour indicators to chart.</div> : categoryCounts.map(([category, count]) => (
+          <button className={`category-chart-row chart-selectable ${selectedCategory === category ? "selected" : ""}`} key={category} onClick={() => chooseCategory(category)} aria-pressed={selectedCategory === category}>
+            <span>{category}</span><span className="chart-track"><span className="chart-fill category" style={{ width: `${(count / maxCategory) * 100}%` }} /></span><strong>{count}</strong>
+          </button>
         ))}
-        <div className="chart-footnote">Malware matches are exact local hash indicators; other categories require analyst review.</div>
+        <div className="chart-footnote">Categories include credential/key access, network communication, persistence, command execution, destructive actions and privilege changes when detected.</div>
+      </div>
+      <div className="finding-evidence-list">
+        <div className="finding-chart-head"><div><span className="eyebrow">FILTERED EVIDENCE</span><h3>Assessment records</h3></div><strong>{filtered.length}<small> MATCHING</small></strong></div>
+        <div className="active-filters">
+          <span>{selectedSeverity === "all" ? "All severities" : selectedSeverity.toUpperCase()}</span>
+          <span>{selectedCategory === "all" ? "All categories" : selectedCategory}</span>
+          {(selectedSeverity !== "all" || selectedCategory !== "all") && <button onClick={() => { setSelectedSeverity("all"); setSelectedCategory("all"); }}>Clear filters</button>}
+        </div>
+        {filtered.length === 0 ? <div className="chart-empty">No records match these filters.</div> : filtered.map((record) => (
+          <article className="finding-evidence-row" key={record.id}>
+            <span className={`severity-badge ${record.severity}`}>{record.severity.toUpperCase()}</span>
+            <div className="finding-evidence-main"><strong>{record.title}</strong><small>{record.categories.join(" · ")}</small><code>{record.path}</code><p>{record.description}</p>{record.sha256 && <small>SHA-256: {record.sha256}</small>}</div>
+            <span className="finding-evidence-source">{record.source}</span>
+          </article>
+        ))}
       </div>
     </div>
   );
