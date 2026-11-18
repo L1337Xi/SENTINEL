@@ -12,8 +12,8 @@ import json
 import os
 import pwd
 import re
-import shutil
 import selectors
+import shutil
 import stat
 import subprocess
 import time
@@ -146,7 +146,8 @@ def _clamav_scan(root: Path, timeout: int = 90,
                         if progress_callback:
                             progress_callback({"current_path": current_path,
                                                "clamav_files_scanned": files_scanned})
-                    elif line.startswith("Scanning:") or line.startswith("Scanning "):
+                    elif line.startswith(("Scanning:", "Scanning ")):
+
                         current_path = line.partition(":")[2].strip() if line.startswith("Scanning:") else line.removeprefix("Scanning ").strip()
                         if progress_callback:
                             progress_callback({"current_path": current_path,
