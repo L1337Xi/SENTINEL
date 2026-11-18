@@ -1,9 +1,7 @@
 import hashlib
 import json
 
-from app import threat_intel
-
-from app import host_assessment
+from app import host_assessment, threat_intel
 
 
 def test_hash_indicator_match_is_reported_without_modifying_file(tmp_path, monkeypatch):
