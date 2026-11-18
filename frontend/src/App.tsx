@@ -579,7 +579,7 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
                 {typeof finding.sha256 === "string" && <small className="hash-line">SHA-256 · {finding.sha256}</small>}
                 <div className="finding-response-actions">
                   <button className="button button-secondary" onClick={() => void investigateFinding(finding)} disabled={responseBusy === findingId}>{responseBusy === findingId ? "Investigating…" : investigation.assessment ? "Re-investigate file" : "Investigate file"}</button>
-                  {investigation.assessment && <span className="history-protected">{String(assessmentInfo.verdict ?? "unverified").replace(/_/g, " ").toUpperCase()} · {String(assessmentInfo.confidence ?? "unknown")} CONFIDENCE</span>}
+                  {hasInvestigation && <span className="history-protected">{String(assessmentInfo.verdict ?? "unverified").replace(/_/g, " ").toUpperCase()} · {String(assessmentInfo.confidence ?? "unknown")} CONFIDENCE</span>}
                   <button className="button button-danger" onClick={() => void respondFinding(finding, "quarantine")} disabled={responseBusy === findingId || isPackageManaged || !finding.sha256}>Quarantine</button>
                   <button className="text-action history-delete" onClick={() => void respondFinding(finding, "delete")} disabled={responseBusy === findingId || isPackageManaged || !finding.sha256}>Delete permanently</button>
                 </div>
