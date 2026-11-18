@@ -1,8 +1,5 @@
-import pytest
-
 from app import database
 from app.main import app
-from app.scanner import validate_local_network
 from fastapi.testclient import TestClient
 
 
@@ -58,6 +55,9 @@ def test_rejects_naive_timestamp():
 
 
 def test_scanner_network_scope_rejects_public_and_broad_ranges():
+    import pytest
+
+    from app.scanner import validate_local_network
     with pytest.raises(ValueError):
         validate_local_network("8.8.8.0/24")
     with pytest.raises(ValueError):
@@ -78,5 +78,8 @@ def test_network_schema_rejects_extra_fields():
 
 
 def test_scanner_rejects_ipv6_networks():
+    import pytest
+
+    from app.scanner import validate_local_network
     with pytest.raises(TypeError):
         validate_local_network("fd00::/64")
