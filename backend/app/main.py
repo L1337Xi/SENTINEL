@@ -17,7 +17,6 @@ from .database import (
     create_alert,
     create_case,
     create_scan,
-    get_case as fetch_case,
     initialize_database,
     link_event_to_case,
     list_alerts,
@@ -36,6 +35,7 @@ from .database import (
     update_case,
     update_scan,
 )
+from .database import get_case as fetch_case
 from .detections import RULES, evaluate_event
 from .scanner import network_discovery, system_inventory, validate_local_network
 from .schemas import (
