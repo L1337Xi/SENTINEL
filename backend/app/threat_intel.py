@@ -140,7 +140,7 @@ def _stale_or_error(cached: object, reason: str) -> dict:
         feed = dict(cached["feed"])
         feed.update({
             "status": "stale", "cached": True,
-            "cache_age_seconds": max(0, int(time.time() - cached.get("fetched_at", time.time()))),
+            "cache_age_seconds": max(0, int(time.time() - cached["fetched_at"])) if isinstance(cached.get("fetched_at"), (int, float)) else None,
             "error": reason,
             "note": "Live MalwareBazaar refresh failed; a previously cached feed was used. Its age is reported and the feed may be incomplete.",
         })
@@ -230,11 +230,11 @@ def lookup_circl_hashes(
                     raw = response.read(64 * 1024 + 1)
                 if len(raw) > 64 * 1024:
                     errors += 1
-                    continue
+                    break
                 payload = json.loads(raw.decode("utf-8"))
                 if not isinstance(payload, dict):
                     errors += 1
-                    continue
+                    break
                 product = payload.get("ProductCode")
                 result = {
                     "status": "found", "checked_at": now,
@@ -254,10 +254,10 @@ def lookup_circl_hashes(
                     circl_cache[digest] = result
                 else:
                     errors += 1
-                    continue
+                    break
             except (URLError, TimeoutError, OSError, UnicodeError, json.JSONDecodeError):
                 errors += 1
-                continue
+                break
 
         if result.get("status") == "found":
             matches.append({
@@ -273,14 +273,22 @@ def lookup_circl_hashes(
         else:
             misses += 1
 
+    if len(circl_cache) > 10000:
+        retained = sorted(
+            circl_cache.items(),
+            key=lambda item: item[1].get("checked_at", 0) if isinstance(item[1], dict) else 0,
+            reverse=True,
+        )[:10000]
+        cache["circl"] = dict(retained)
     _write_cache(cache)
-    status = "unavailable" if errors and not (matches or misses or cache_hits) else ("partial" if errors else "ok")
+    status = "unavailable" if errors and not (matches or misses) else ("partial" if errors else "ok")
     return {
         "provider": "CIRCL hashlookup", "status": status,
         "hashes_considered": len(selected), "lookups_performed": requests_made,
         "cache_hits": cache_hits, "known_file_matches": len(matches),
         "not_found": misses, "errors": errors,
         "skipped_by_limit": max(0, len(digests) - len(selected)),
+        "skipped_after_provider_error": max(0, len(selected) - len(matches) - misses),
         "matches": matches,
         "note": "CIRCL hashlookup supplies known-file context, not a malware verdict. A match does not prove a file is safe or malicious. Only SHA-256 hashes were sent; file contents and paths were not transmitted.",
     }
