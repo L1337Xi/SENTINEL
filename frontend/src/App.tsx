@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import DoodleCrewFooter from "./components/ui/doodle-crew-footer";
 import { api, type AlertRecord, type NetworkInterface, type ScanRecord, type SecurityEvent, type Severity } from "./api";
 
 type View = "overview" | "events" | "alerts" | "host" | "network";
@@ -162,7 +163,7 @@ export default function App() {
         {view === "alerts" && <AlertsView alerts={alerts} onChangeStatus={changeAlertStatus} onRefresh={() => void refresh()} />}
         {view === "host" && <HostView scan={activeScan?.scan_type === "system" ? activeScan : scans.find((scan) => scan.scan_type === "system") ?? null} scans={scans} busy={busy} onStart={() => void startScan("system")} />}
         {view === "network" && <NetworkView networks={networks} selected={selectedNetwork} setSelected={setSelectedNetwork} scan={activeScan?.scan_type === "network" ? activeScan : scans.find((scan) => scan.scan_type === "network") ?? null} scans={scans} busy={busy} onStart={() => void startScan("network")} onReload={() => void loadNetworks()} />}
-        <footer className="footer"><span>L1337XI SENTINEL</span><span>LOCAL-FIRST SECURITY OPERATIONS</span><span>EARLY ACCESS BUILD</span></footer>
+        <DoodleCrewFooter />
       </main>
     </div>
   );
