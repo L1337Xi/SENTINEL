@@ -7,7 +7,8 @@
 - [x] Initial backend test coverage and CI workflow
 - [ ] Authentication, authorization, and secure session management
 - [ ] Event source adapters and normalization
-- [ ] Sigma-compatible detection and alert lifecycle
+- [x] Initial deterministic detection rule and alert lifecycle (open, acknowledged, resolved)
+- [ ] Sigma-compatible rule ingestion, validation, and evaluation
 - [ ] Correlation, incident cases, and investigation timelines
 - [ ] Evidence intake, hashing, metadata, and chain of custody
 - [ ] YARA-assisted analysis workflow
