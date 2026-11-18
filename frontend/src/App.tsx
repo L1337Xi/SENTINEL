@@ -425,6 +425,7 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
             <Resource label="SCAN STATUS" value={assessmentSummary.truncated ? "LIMIT REACHED" : "COMPLETED"} detail={assessmentSummary.truncated ? "File or time budget reached" : "Configured scan scope completed"} />
             <Resource label="CLAMAV ENGINE" value={clamav.executed ? "EXECUTED" : clamav.available ? "AVAILABLE" : "NOT INSTALLED"} detail={String(clamav.version ?? clamav.note ?? "No local engine detected")} />
           </div>
+          <AssessmentFindingCharts findings={findings} />
           <div className="simple-table">
             {findings.length === 0 ? <div className="empty-state">No configured hash matches or flagged configuration items were found in the scanned scope. This is not a guarantee that the host is clean.</div> :
               findings.map((finding, index) => <article className="simple-row" key={String(finding.id ?? index)} style={{gridTemplateColumns:"auto 1fr", alignItems:"start"}}>
@@ -482,6 +483,45 @@ function HostView({ scan, scans, busy, onStart }: { scan: ScanRecord | null; sca
       </div>}
     </section>
   </>;
+}
+function AssessmentFindingCharts({ findings }: { findings: Record<string, unknown>[] }) {
+  const severityLevels = ["critical", "high", "medium", "low"] as const;
+  const severityCounts = severityLevels.map((level) => ({
+    level,
+    count: findings.filter((finding) => String(finding.severity ?? "low").toLowerCase() === level).length,
+  }));
+  const maxSeverity = Math.max(1, ...severityCounts.map((item) => item.count));
+  const categoryCounts = Object.entries(findings.reduce<Record<string, number>>((counts, finding) => {
+    const category = String(finding.category ?? "other").replace(/_/g, " ");
+    counts[category] = (counts[category] ?? 0) + 1;
+    return counts;
+  }, {})).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const maxCategory = Math.max(1, ...categoryCounts.map((item) => item[1]));
+  const confirmed = findings.filter((finding) => finding.category === "malware").length;
+  return (
+    <div className="finding-analytics" aria-label="Assessment finding charts">
+      <div className="finding-chart-card">
+        <div className="finding-chart-head"><div><span className="eyebrow">RISK PROFILE</span><h3>Findings by severity</h3></div><strong>{findings.length}<small> TOTAL</small></strong></div>
+        {severityCounts.map((item) => (
+          <div className="severity-chart-row" key={item.level}>
+            <span className={`severity-badge ${item.level}`}>{item.level}</span>
+            <div className="chart-track"><div className={`chart-fill ${item.level}`} style={{ width: `${(item.count / maxSeverity) * 100}%` }} /></div>
+            <strong>{item.count}</strong>
+          </div>
+        ))}
+        <div className="chart-footnote">Severity reflects the assessment rule classification, not proof of compromise.</div>
+      </div>
+      <div className="finding-chart-card">
+        <div className="finding-chart-head"><div><span className="eyebrow">FINDING DISTRIBUTION</span><h3>By detection category</h3></div><strong>{confirmed}<small> MALWARE</small></strong></div>
+        {categoryCounts.length === 0 ? <div className="chart-empty">No findings to chart.</div> : categoryCounts.map(([category, count]) => (
+          <div className="category-chart-row" key={category}>
+            <span>{category}</span><div className="chart-track"><div className="chart-fill category" style={{ width: `${(count / maxCategory) * 100}%` }} /></div><strong>{count}</strong>
+          </div>
+        ))}
+        <div className="chart-footnote">Malware matches are exact local hash indicators; other categories require analyst review.</div>
+      </div>
+    </div>
+  );
 }
 function Resource({ label, value, detail }: { label: string; value: string; detail: string }) {
   return <div className="resource-card"><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>;
