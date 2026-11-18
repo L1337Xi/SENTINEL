@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
-import { api, type AlertRecord, type NetworkInterface, type ScanRecord, type SecurityEvent, type Severity } from "./api";
+import { api, type AlertRecord, type NetworkInterface, type ScanRecord, type SecurityEvent, type Severity, type EditionManifest } from "./api";
 import DoodleCrewFooter from "@/components/ui/doodle-crew-footer";
 
 type View = "home" | "overview" | "events" | "alerts" | "host" | "network";
@@ -61,7 +61,7 @@ export default function App() {
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [alerts, setAlerts] = useState<AlertRecord[]>([]);
   const [total, setTotal] = useState(0);
-  const [health, setHealth] = useState<"checking" | "online" | "offline">("checking");
+  const [health, setHealth] = useState<"checking" | "online" | "offline">("checking");\n  const [edition, setEdition] = useState<EditionManifest | null>(null);
   const [search, setSearch] = useState("");
   const [severity, setSeverity] = useState("");
   const [busy, setBusy] = useState(false);
@@ -73,8 +73,8 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const [status, page, history, alertPage] = await Promise.all([api.health(), api.events({ search: search.trim(), severity }), api.scans(), api.alerts()]);
-      setHealth(status.status === "ok" ? "online" : "offline");
+      const [status, page, history, alertPage, editionInfo] = await Promise.all([api.health(), api.events({ search: search.trim(), severity }), api.scans(), api.alerts(), api.edition()]);
+      setHealth(status.status === "ok" ? "online" : "offline");\n      setEdition(editionInfo);
       setEvents(page.items); setTotal(page.total); setScans(history.items); setAlerts(alertPage.items); setError("");
       setActiveScan((current) => {
         if (current && ["queued", "running"].includes(current.status)) return current;
@@ -183,7 +183,7 @@ export default function App() {
       <main className="main-content">
         <header className="topbar">
           <div className="crumb"><span>CONSOLE</span><b>/</b>{currentTitle.toUpperCase()}</div>
-          <div className="topbar-right"><span className="environment"><i /> PRIVATE WORKSTATION</span><span className="top-divider" /><span className="api-state"><i className={health} />{health === "online" ? "CONNECTED" : health.toUpperCase()}</span></div>
+          <div className="topbar-right"><span className={`edition-chip ${edition?.edition ?? "normal"}`}>{edition?.display_name ?? "SENTINEL Normal"}</span><span className="environment"><i /> PRIVATE WORKSTATION</span><span className="top-divider" /><span className="api-state"><i className={health} />{health === "online" ? "CONNECTED" : health.toUpperCase()}</span></div>
         </header>
 
         {error && <div className="error-banner"><span className="error-mark">!</span><div><strong>Operation notice</strong><small>{error}</small></div><button onClick={() => void refresh()}>RETRY</button><button className="dismiss" onClick={() => setError("")} aria-label="Dismiss notice">×</button></div>}
