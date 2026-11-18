@@ -126,6 +126,8 @@ def _clamav_scan(root: Path, timeout: int = 90,
                     if not line:
                         continue
                     if line.endswith(" FOUND"):
+                        files_scanned += 1
+                        current_path = line.rsplit(": ", 1)[0]
                         file_path, signature = line.rsplit(": ", 1)
                         detections.append({
                             "id": f"clamav-{hashlib.sha256(line.encode()).hexdigest()[:12]}",
@@ -160,6 +162,8 @@ def _clamav_scan(root: Path, timeout: int = 90,
         if pending:
             line = pending.decode(errors="replace").strip()
             if line.endswith(" FOUND"):
+                files_scanned += 1
+                current_path = line.rsplit(": ", 1)[0]
                 file_path, signature = line.rsplit(": ", 1)
                 detections.append({
                     "id": f"clamav-{hashlib.sha256(line.encode()).hexdigest()[:12]}",
