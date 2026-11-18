@@ -374,7 +374,7 @@ def get_case_history(case_id: str, limit: int=Query(default=200,ge=1,le=500)) ->
 def get_audit_log(
     limit: int = Query(default=100, ge=1, le=500),
     entity_type: str | None = Query(
-        default=None, pattern="^(event|alert|case|evidence)$"
+        default=None, pattern="^(event|alert|case|evidence|scan)$"
     ),
 ) -> dict:
     rows = list_audit_log(limit, entity_type)
