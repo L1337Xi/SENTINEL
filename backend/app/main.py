@@ -156,12 +156,22 @@ def get_event(event_id: str) -> dict:
 
 
 def _execute_scan(scan_id: str, scan_type: str, target: str) -> None:
-    update_scan(scan_id, status="running")
+    update_scan(scan_id, status="running", progress={
+        "phase": "starting", "current_path": None, "files_seen": 0,
+        "files_hashed": 0, "bytes_hashed": 0, "malware_matches": 0,
+        "script_indicators": 0, "elapsed_seconds": 0,
+        "time_budget_seconds": 180, "time_budget_remaining": 180,
+    })
     try:
         result = system_inventory() if scan_type == "system" else network_discovery(target)
         if scan_type == "system":
-            result["security_assessment"] = run_host_assessment()
-        update_scan(scan_id, status="completed", result=result, completed_at=datetime.now(UTC).isoformat())
+            def report_progress(progress: dict) -> None:
+                update_scan(scan_id, status="running", progress=progress)
+            result["security_assessment"] = run_host_assessment(progress_callback=report_progress)
+        final_progress = {"phase": "completed", "current_path": None}
+        if scan_type == "system":
+            final_progress.update(result.get("security_assessment", {}).get("summary", {}))
+        update_scan(scan_id, status="completed", result=result, progress=final_progress, completed_at=datetime.now(UTC).isoformat())
     except (OSError, RuntimeError, ValueError, TypeError, sqlite3.Error, psutil.Error) as exc:
         update_scan(scan_id, status="failed", error=str(exc)[:500], completed_at=datetime.now(UTC).isoformat())
 
