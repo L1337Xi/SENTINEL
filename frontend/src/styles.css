@@ -481,6 +481,9 @@ body {
 .integration-key-row:last-of-type { border-bottom: 0; }
 .integration-key-copy h3 { display: inline-block; margin: 0 10px 8px 0; color: #e2eae3; font-size: 15px; font-weight: 620; }
 .integration-key-copy p { max-width: 440px; margin: 0; color: #8e9b91; font-size: 12px; line-height: 1.65; }
+.integration-provider-link { display: inline-flex; align-items: center; gap: 6px; width: fit-content; margin-top: 10px; color: #8eb99a; font: 10px var(--mono); text-decoration: underline; text-decoration-color: #496b53; text-underline-offset: 3px; }
+.integration-provider-link:hover { color: #c4ddca; text-decoration-color: currentColor; }
+.integration-provider-link:focus-visible { outline: 2px solid #8eb99a; outline-offset: 3px; border-radius: 2px; }
 .integration-state { color: #9a8871; font: 10px var(--mono); letter-spacing: .04em; }
 .integration-state.configured { color: #83b894; }
 .integration-key-controls { display: grid; gap: 12px; }
