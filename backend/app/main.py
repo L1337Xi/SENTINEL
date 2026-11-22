@@ -8,8 +8,8 @@ from uuid import UUID, uuid4
 
 import psutil
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
-from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 from .config import CORS_ORIGINS, MAX_PAGE_SIZE
 from .database import (
