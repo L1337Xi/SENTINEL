@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import { api, type AlertRecord, type NetworkInterface, type ScanRecord, type SecurityEvent, type Severity, type EditionManifest } from "./api";
-import DoodleCrewFooter from "@/components/ui/doodle-crew-footer";
 
 type View = "home" | "overview" | "events" | "alerts" | "host" | "network";
 const severityOrder: Severity[] = ["critical", "high", "medium", "low"];
@@ -234,33 +233,55 @@ export default function App() {
 
 function Landing({ health, onEnter, onOpen }: { health: "checking" | "online" | "offline"; onEnter: () => void; onOpen: (view: View) => void }) {
   const sections = navItems.filter((item) => item.id !== "home");
+  const descriptions: Record<Exclude<View, "home">, string> = {
+    overview: "Review current events, scan history and host posture.",
+    events: "Search and filter locally collected security events.",
+    alerts: "Triage detections and track their resolution state.",
+    host: "Inspect system inventory, findings and file evidence.",
+    network: "Discover responsive devices on an authorised private subnet.",
+  };
   return (
     <div className="landing">
-      <DoodleCrewFooter className="dcf-top landing-hero" backToTop={false} />
-      <section className="landing-console">
-        <div className="landing-console-head">
-          <div>
-            <span className="eyebrow">SECURITY OPERATIONS CONSOLE</span>
-            <h2>Analyst workspace</h2>
-            <p>Event intake, triage, host assessment and scoped discovery — served from this machine only. No cloud, no telemetry, no invented findings.</p>
+      <header className="landing-header">
+        <button className="landing-wordmark" onClick={onEnter} aria-label="Open SENTINEL console">SENTINEL <span>SECURITY OPERATIONS</span></button>
+        <div className="landing-header-meta"><span className={`landing-status ${health}`} /><span>{health === "online" ? "Local API connected" : health === "checking" ? "Checking local API" : "Local API offline"}</span><span className="landing-local-label">Runs on this machine</span></div>
+      </header>
+      <main>
+        <section className="landing-hero">
+          <div className="landing-hero-copy">
+            <p className="landing-kicker">LOCAL SECURITY WORKSPACE</p>
+            <h1>Security operations.<br/><span>Kept on your machine.</span></h1>
+            <p className="landing-description">SENTINEL brings host assessment, network discovery, event review and alert triage into one local workspace. It shows the evidence collected and the limits of each check.</p>
+            <div className="landing-actions">
+              <button className="button button-primary" onClick={onEnter}>Open console <ArrowRight size={15}/></button>
+              <button className="button button-secondary" onClick={() => onOpen("host")}>Host assessment</button>
+            </div>
           </div>
-          <button className="button button-primary landing-enter" onClick={onEnter}>Enter console <ArrowRight size={15} /></button>
-        </div>
-        <div className="landing-sections">
-          {sections.map((item) => (
-            <button key={item.id} className="landing-section" onClick={() => onOpen(item.id)}>
-              <span className="nav-code">{item.code}</span>
-              <span>{item.label}</span>
-              <ArrowRight size={13} />
-            </button>
-          ))}
-        </div>
-        <div className="landing-state"><i className={health} />{health === "online" ? "Local API connected" : health === "checking" ? "Checking local API" : "Local API offline — start the backend to load live data"}</div>
-      </section>
+          <aside className="landing-brief" aria-label="Local operation details">
+            <div className="landing-brief-heading">Execution boundary</div>
+            <div className="landing-brief-row"><span>Processing</span><strong>Local machine</strong></div>
+            <div className="landing-brief-row"><span>Telemetry</span><strong>Not sent to SENTINEL cloud</strong></div>
+            <div className="landing-brief-row"><span>Assessment mode</span><strong>Evidence-led checks</strong></div>
+            <p>External threat-intelligence lookups are optional and disclosed separately when configured.</p>
+          </aside>
+        </section>
+        <section className="landing-workspace" aria-labelledby="landing-workspace-title">
+          <div className="landing-section-heading"><div><p className="landing-kicker">WORKSPACE</p><h2 id="landing-workspace-title">Go to a workspace</h2></div><span>Choose a section</span></div>
+          <div className="landing-sections">
+            {sections.map((item) => (
+              <button key={item.id} className="landing-section" onClick={() => onOpen(item.id)}>
+                <span className="landing-section-code">{item.code}</span>
+                <span className="landing-section-copy"><strong>{item.label}</strong><small>{descriptions[item.id]}</small></span>
+                <ArrowRight size={15} aria-hidden="true"/>
+              </button>
+            ))}
+          </div>
+        </section>
+      </main>
+      <footer className="landing-footer"><span>SENTINEL · LOCAL-FIRST SECURITY OPERATIONS</span><span>Build 0.3.0</span></footer>
     </div>
   );
 }
-
 function PageHeading({ eyebrow, title, description, children }: { eyebrow: string; title: string; description: string; children?: ReactNode }) {
   return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{description}</p></div>{children && <div className="heading-actions">{children}</div>}</div>;
 }
