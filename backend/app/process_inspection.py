@@ -6,7 +6,6 @@ Indicators are investigation leads, not standalone malware verdicts.
 """
 from __future__ import annotations
 
-import os
 import re
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
@@ -23,7 +22,7 @@ MAX_REMOTE_ENDPOINTS = 8
 SUSPICIOUS_EXECUTABLE_ROOTS = ("/tmp/", "/var/tmp/", "/dev/shm/")
 MAP_LINE = re.compile(
     r"^([0-9a-f]+)-([0-9a-f]+)\s+([rwxps-]{4})\s+"
-    r"[0-9a-f]+\s+[0-9a-f:]+\s+\\d+\s*(.*)$"
+    r"[0-9a-f]+\s+[0-9a-f:]+\s+\d+\s*(.*)$"
 )
 
 
