@@ -91,3 +91,40 @@ def test_unsupported_provider_is_rejected():
 
     with pytest.raises(ValueError):
         integration_settings.verify_provider("unknown")
+
+
+
+def test_virustotal_verification_uses_authenticated_file_report_endpoint(monkeypatch):
+    calls = []
+
+    def fake_request(url, **kwargs):
+        calls.append((url, kwargs))
+        return 200, {"data": {"id": integration_settings.VT_EMPTY_SHA256}}
+
+    monkeypatch.setattr(integration_settings, "_request", fake_request)
+    result = integration_settings._verify_virustotal({"virustotal": "vt-secret"})
+    assert result["status"] == "verified"
+    assert calls[0][0].endswith(integration_settings.VT_EMPTY_SHA256)
+    assert calls[0][1]["headers"]["x-apikey"] == "vt-secret"
+
+
+def test_malwarebytes_verification_checks_oauth_and_account(monkeypatch):
+    calls = []
+
+    def fake_request(url, **kwargs):
+        calls.append((url, kwargs))
+        if url.endswith("/oauth2/token"):
+            return 200, {"access_token": "temporary-token"}
+        return 200, {"account": {"id": "account-123"}}
+
+    monkeypatch.setattr(integration_settings, "_request", fake_request)
+    result = integration_settings._verify_malwarebytes({
+        "malwarebytes_client_id": "client-id",
+        "malwarebytes_client_secret": "client-secret",
+        "malwarebytes_account_id": "account-123",
+    })
+    assert result["status"] == "verified"
+    assert calls[0][0] == "https://api.malwarebytes.com/oauth2/token"
+    assert calls[1][0] == "https://api.malwarebytes.com/nebula/v1/account"
+    assert calls[1][1]["headers"]["Authorization"] == "Bearer temporary-token"
+    assert calls[1][1]["headers"]["accountid"] == "account-123"
