@@ -119,12 +119,23 @@ def _verification_state() -> dict:
             if key in PROVIDERS and isinstance(value, dict)}
 
 
+def _legacy_malwarebytes_key_present() -> bool:
+    """Detect the obsolete single-field key saved by earlier SENTINEL versions."""
+    try:
+        raw = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return False
+    return isinstance(raw, dict) and isinstance(raw.get("malwarebytes"), str) and bool(raw["malwarebytes"].strip())
+
+
 def provider_status() -> dict:
     values, sources = _credentials()
     verification = _verification_state()
     result = {}
     for provider in PROVIDERS:
         configured, config_state = _provider_config(provider, values)
+        if provider == "malwarebytes" and not configured and _legacy_malwarebytes_key_present():
+            config_state = "legacy_single_key"
         state = verification.get(provider, {})
         if not isinstance(state, dict):
             state = {}
@@ -136,10 +147,13 @@ def provider_status() -> dict:
                 else "local_file" if configured else "none"
             ),
             "verification": state if configured else {
-                "status": "incomplete" if config_state == "incomplete_credentials" else "not_configured",
+                "status": "legacy_key_unsupported" if config_state == "legacy_single_key" else ("incomplete" if config_state == "incomplete_credentials" else "not_configured"),
                 "message": (
-                    "Malwarebytes requires Client ID, Client Secret and Account ID."
-                    if config_state == "incomplete_credentials" else "Credentials are not configured."
+                    "An old single-key Malwarebytes value was found. Nebula requires Client ID, Client Secret and Account ID; clear the old value and enter the three correct credentials."
+                    if config_state == "legacy_single_key" else (
+                        "Malwarebytes requires Client ID, Client Secret and Account ID."
+                        if config_state == "incomplete_credentials" else "Credentials are not configured."
+                    )
                 ),
             },
         }
