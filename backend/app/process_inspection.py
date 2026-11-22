@@ -22,8 +22,8 @@ MAX_INDICATORS = 500
 MAX_REMOTE_ENDPOINTS = 8
 SUSPICIOUS_EXECUTABLE_ROOTS = ("/tmp/", "/var/tmp/", "/dev/shm/")
 MAP_LINE = re.compile(
-    r"^([0-9a-f]+)-([0-9a-f]+)\\s+([rwxps-]{4})\\s+"
-    r"[0-9a-f]+\\s+[0-9a-f:]+\\s+\\d+\\s*(.*)$"
+    r"^([0-9a-f]+)-([0-9a-f]+)\s+([rwxps-]{4})\s+"
+    r"[0-9a-f]+\s+[0-9a-f:]+\s+\\d+\s*(.*)$"
 )
 
 
@@ -68,7 +68,8 @@ def inspect_processes(
     maps_truncated = False
     inaccessible = 0
     observed = 0
-    connections_by_pid: dict[int, list[dict[str, str]]] = defaultdict(list)
+    processes_truncated = False
+    connections_by_pid: dict[int, list[str]] = defaultdict(list)
     try:
         connections = psutil.net_connections(kind="inet")
     except (psutil.AccessDenied, OSError):
@@ -84,6 +85,7 @@ def inspect_processes(
 
     for process in psutil.process_iter():
         if observed >= max_processes:
+            processes_truncated = True
             break
         observed += 1
         try:
@@ -208,7 +210,7 @@ def inspect_processes(
         "completed_at": datetime.now(UTC).isoformat(),
         "scope": {
             "max_processes": max_processes,
-            "max_executable_maps": max_total_maps,
+            "max_mapping_entries": max_total_maps,
             "max_maps_per_process": MAX_MAPS_PER_PROCESS,
             "process_command_lines_collected": False,
             "process_memory_contents_read": False,
@@ -217,8 +219,8 @@ def inspect_processes(
             "processes_observed": observed,
             "processes_inspected": len(process_rows),
             "processes_inaccessible": inaccessible,
-            "executable_mappings_inspected": map_count,
-            "processes_truncated": observed >= max_processes,
+            "mapping_entries_read": map_count,
+            "processes_truncated": processes_truncated,
             "mappings_truncated": maps_truncated,
             "indicators": len(indicators),
             "indicator_counts": dict(counts),
