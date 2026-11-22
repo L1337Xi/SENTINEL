@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 import psutil
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import CORS_ORIGINS, MAX_PAGE_SIZE
@@ -51,6 +52,7 @@ from .file_response import (
     restore_quarantined,
 )
 from .host_assessment import run_host_assessment
+from .integration_settings import provider_status, save_provider_keys
 from .scanner import network_discovery, system_inventory, validate_local_network
 from .schemas import (
     AlertUpdate,
@@ -93,6 +95,27 @@ app.include_router(evidence_router)
 def get_edition() -> dict:
     """Return the configured edition and its published capability catalogue."""
     return edition_manifest()
+
+
+class IntegrationKeysUpdate(BaseModel):
+    malwarebazaar: str | None = Field(default=None, max_length=512)
+    virustotal: str | None = Field(default=None, max_length=512)
+    malwarebytes: str | None = Field(default=None, max_length=512)
+
+
+@app.get("/api/integrations/keys", tags=["integrations"])
+def get_integration_keys() -> dict:
+    """Return provider configuration state only; never disclose stored secrets."""
+    return provider_status()
+
+
+@app.put("/api/integrations/keys", tags=["integrations"])
+def put_integration_keys(payload: IntegrationKeysUpdate) -> dict:
+    """Save or clear optional provider credentials without returning their values."""
+    try:
+        return save_provider_keys(payload.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/health", tags=["system"])
