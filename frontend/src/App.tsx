@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
-import { api, type AlertRecord, type NetworkInterface, type ScanRecord, type SecurityEvent, type Severity, type EditionManifest } from "./api";
+import { api, type AlertRecord, type NetworkInterface, type ScanRecord, type SecurityEvent, type Severity, type EditionManifest, type IntegrationKeysStatus } from "./api";
 
-type View = "home" | "overview" | "events" | "alerts" | "host" | "network";
+type View = "home" | "overview" | "events" | "alerts" | "host" | "network" | "settings";
 const severityOrder: Severity[] = ["critical", "high", "medium", "low"];
 const navItems: { id: View; label: string; code: string }[] = [
   { id: "home", label: "Home", code: "00" },
@@ -10,7 +10,7 @@ const navItems: { id: View; label: string; code: string }[] = [
   { id: "events", label: "Event stream", code: "02" },
   { id: "alerts", label: "Detection alerts", code: "03" },
   { id: "host", label: "Host assessment", code: "04" },
-  { id: "network", label: "Network discovery", code: "05" },
+  { id: "network", label: "Network discovery", code: "05" },\n  { id: "settings", label: "Integrations & keys", code: "06" },
 ];
 
 function formatDate(value?: string | null): string {
@@ -225,7 +225,7 @@ export default function App() {
         {view === "events" && <EventsView events={events} total={total} search={search} severity={severity} setSearch={setSearch} setSeverity={setSeverity} onRefresh={() => void refresh()} />}
         {view === "alerts" && <AlertsView alerts={alerts} onChangeStatus={changeAlertStatus} onRefresh={() => void refresh()} />}
         {view === "host" && <HostView scan={activeScan?.scan_type === "system" ? activeScan : scans.find((scan) => scan.scan_type === "system") ?? null} scans={scans} busy={busy} onStart={() => void startScan("system")} onDeleteScan={(id) => void deleteHostScan(id)} onClearHistory={() => void clearHostScanHistory()} />}
-        {view === "network" && <NetworkView networks={networks} selected={selectedNetwork} setSelected={setSelectedNetwork} scan={activeScan?.scan_type === "network" ? activeScan : scans.find((scan) => scan.scan_type === "network") ?? null} scans={scans} busy={busy} onStart={() => void startScan("network")} onReload={() => void loadNetworks()} />}
+        {view === "network" && <NetworkView networks={networks} selected={selectedNetwork} setSelected={setSelectedNetwork} scan={activeScan?.scan_type === "network" ? activeScan : scans.find((scan) => scan.scan_type === "network") ?? null} scans={scans} busy={busy} onStart={() => void startScan("network")} onReload={() => void loadNetworks()} />}\n        {view === "settings" && <IntegrationSettingsView />}
       </main>
     </div>
   );
@@ -239,7 +239,7 @@ function Landing({ health, onEnter, onOpen }: { health: "checking" | "online" | 
     events: "Search and filter locally collected security events.",
     alerts: "Triage detections and track their resolution state.",
     host: "Inspect system inventory, findings and file evidence.",
-    network: "Discover responsive devices on an authorised private subnet.",
+    network: "Discover responsive devices on an authorised private subnet.",\n    settings: "Configure local credentials for optional threat-intelligence providers.",
   };
   return (
     <div className="landing">
@@ -733,6 +733,54 @@ function NetworkView({ networks, selected, setSelected, scan, scans, busy, onSta
         <div className="resource-grid network-metrics"><Resource label="TARGET RANGE" value={String(result.network ?? scan.target)} detail="Local private subnet" /><Resource label="ADDRESSES CHECKED" value={String(result.addresses_checked ?? 0)} detail="Usable host addresses" /><Resource label="RESPONSIVE HOSTS" value={String(result.responsive_hosts ?? 0)} detail="At least one checked port open" /><Resource label="PORTS CHECKED" value={String(asArray(result.ports_checked).length)} detail="Fixed TCP service list" /></div>
         <div className="result-section"><div className="result-heading"><h3>Discovered devices</h3><span>{hosts.length} RESPONSIVE</span></div><div className="table-scroll"><table className="data-table"><thead><tr><th>IP ADDRESS</th><th>OPEN PORT</th><th>SERVICE</th></tr></thead><tbody>{hosts.flatMap((host) => asArray<Record<string, unknown>>(host.open_services).map((service, index) => <tr key={String(host.address) + String(service.port)}>{index === 0 && <td rowSpan={asArray(host.open_services).length}><strong>{String(host.address)}</strong></td>}<td>{String(service.port)}</td><td>{String(service.service)}</td></tr>))}</tbody></table></div>{hosts.length === 0 && <div className="empty-state">No hosts responded on the selected TCP ports. This does not prove that the subnet is empty.</div>}</div>
       </>}
+    </section>
+  </>;
+}
+
+
+function IntegrationSettingsView() {
+  const [status, setStatus] = useState<IntegrationKeysStatus | null>(null);
+  const [keys, setKeys] = useState({ malwarebazaar: "", virustotal: "", malwarebytes: "" });
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [busyProvider, setBusyProvider] = useState("");
+  const providers = [
+    { id: "malwarebazaar" as const, name: "MalwareBazaar", description: "Recent malware hash feed. This provider is already integrated with Host Assessment." },
+    { id: "virustotal" as const, name: "VirusTotal", description: "Credential can be saved now. Hash lookup integration is not implemented yet; commercial use requires an appropriate VirusTotal licence." },
+    { id: "malwarebytes" as const, name: "Malwarebytes", description: "Credential can be saved now. A supported Malwarebytes API/scanning integration is not implemented yet." },
+  ];
+  const load = useCallback(async () => {
+    try { setStatus(await api.integrationKeys()); setError(""); }
+    catch (err) { setError(err instanceof Error ? err.message : "Could not load integration settings."); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+  async function save(provider: keyof typeof keys, clear = false) {
+    setBusyProvider(provider); setError(""); setMessage("");
+    try {
+      const result = await api.saveIntegrationKeys({ [provider]: clear ? "" : keys[provider] });
+      setStatus(result);
+      setKeys((current) => ({ ...current, [provider]: "" }));
+      setMessage(clear ? providers.find((item) => item.id === provider)?.name + " key cleared." : providers.find((item) => item.id === provider)?.name + " key saved locally.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not save provider key."); }
+    finally { setBusyProvider(""); }
+  }
+  return <>
+    <PageHeading eyebrow="SYSTEM / INTEGRATIONS" title="API keys & integrations" description="Manage optional provider credentials stored by this local SENTINEL instance." />
+    <section className="panel full-panel integration-settings">
+      <div className="panel-title"><div><div className="eyebrow">THREAT INTELLIGENCE PROVIDERS</div><h2>Provider credentials</h2></div><span className="section-note">LOCAL CONFIGURATION</span></div>
+      {providers.map((provider) => {
+        const state = status?.providers[provider.id];
+        return <div className="integration-key-row" key={provider.id}>
+          <div className="integration-key-copy"><div><h3>{provider.name}</h3><span className={state?.configured ? "integration-state configured" : "integration-state"}>{state?.configured ? "KEY CONFIGURED" : "NOT CONFIGURED"}</span></div><p>{provider.description}</p></div>
+          <div className="integration-key-controls">
+            <label><span>{state?.configured ? "REPLACE API KEY" : "API KEY"}</span><input type="password" autoComplete="new-password" spellCheck={false} value={keys[provider.id]} onChange={(event) => setKeys((current) => ({ ...current, [provider.id]: event.target.value }))} placeholder={state?.configured ? "Saved key is hidden" : "Paste provider API key"} /></label>
+            <div><button className="button button-secondary" disabled={busyProvider === provider.id || !keys[provider.id].trim()} onClick={() => void save(provider.id)}>{busyProvider === provider.id ? "Saving…" : "Save key"}</button><button className="text-action" disabled={busyProvider === provider.id || !state?.configured} onClick={() => void save(provider.id, true)}>Clear key</button></div>
+          </div>
+        </div>;
+      })}
+      {message && <p className="history-note">{message}</p>}
+      {error && <p className="scan-error">{error}</p>}
+      <div className="scope-note"><span className="scope-mark">i</span><p>{status?.storage_note ?? "Credentials are stored locally with owner-only file permissions. They are not encrypted at rest. Never share API keys in screenshots, source control or chat."} Keys are never displayed again by this interface. MalwareBazaar uses its saved key in Host Assessment. VirusTotal and Malwarebytes credentials are saved for future integrations; saving a key does not activate scanning.</p></div>
     </section>
   </>;
 }
