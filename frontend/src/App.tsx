@@ -837,7 +837,7 @@ function IntegrationSettingsView() {
     access_denied: "ACCESS / LICENCE DENIED", account_or_scope_error: "ACCOUNT OR SCOPE ERROR",
     rate_limited: "RATE LIMITED · NOT VERIFIED", unavailable: "PROVIDER UNAVAILABLE",
     error: "VERIFICATION ERROR", not_verified: "NOT YET VERIFIED", incomplete: "INCOMPLETE CREDENTIALS",
-    not_configured: "NOT CONFIGURED",
+    not_configured: "NOT CONFIGURED", legacy_key_unsupported: "OLD KEY FORMAT · NOT USABLE",
   }[value] ?? value.replace(/_/g, " ").toUpperCase());
   return <>
     <PageHeading eyebrow="SYSTEM / INTEGRATIONS" title="API keys & integrations" description="Save credentials locally, then verify authentication against each provider's live API." />
@@ -864,7 +864,7 @@ function IntegrationSettingsView() {
             <div>
               <button className="button button-secondary" disabled={busy || (provider.id === "malwarebytes" ? !keys.malwarebytes_client_id.trim() && !keys.malwarebytes_client_secret.trim() && !keys.malwarebytes_account_id.trim() : !keys[provider.id].trim())} onClick={() => void save(provider.id)}>{busy ? "Working…" : "Save credentials"}</button>
               <button className="button button-secondary" disabled={busy || !state?.configured} onClick={() => void verify(provider.id)}>Verify connection</button>
-              <button className="text-action" disabled={busy || (!state?.configured && state?.configuration !== "incomplete_credentials")} onClick={() => void save(provider.id, true)}>Clear</button>
+              <button className="text-action" disabled={busy || (!state?.configured && state?.configuration !== "incomplete_credentials" && state?.configuration !== "legacy_single_key")} onClick={() => void save(provider.id, true)}>Clear</button>
             </div>
           </div>
         </div>;
