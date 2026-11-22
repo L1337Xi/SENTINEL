@@ -429,6 +429,10 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
   const circlIntel = asObject(threatIntel.circl_hashlookup);
   const knownFileContext = asArray<Record<string, unknown>>(threatIntel.known_file_context);
   const persistence = asArray<Record<string, unknown>>(assessment.persistence_inventory);
+  const processInspection = asObject(assessment.process_inspection);
+  const processInspectionSummary = asObject(processInspection.summary);
+  const processIndicators = asArray<Record<string, unknown>>(processInspection.indicators);
+  const inspectedProcesses = asArray<Record<string, unknown>>(processInspection.processes);
   const privilegedAccounts = asObject(assessment.privileged_accounts);
   const uidZeroAccounts = asArray<Record<string, unknown>>(privilegedAccounts.uid_zero_accounts);
   const privilegedGroups = asArray<Record<string, unknown>>(privilegedAccounts.privileged_groups);
@@ -540,6 +544,29 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
         <div className="result-section"><div className="result-heading"><h3>Listening services</h3><span>{listeners.length} SOCKETS</span></div><div className="simple-table">{listeners.length === 0 ? (<div className="empty-state">No listening services were visible to the scanner.</div>) : (listeners.map((item, index) => <div className="simple-row" key={index}><strong>{String(item.process ?? "Unknown process")}</strong><span>{String(item.address)}:{String(item.port)}</span><small>PID {String(item.pid ?? "—")}</small></div>))}</div></div>
 
         <div className="result-section"><div className="result-heading"><h3>Process inventory</h3><span>{processes.length} DISPLAYED / {String(result.process_count ?? "—")} TOTAL</span></div><div className="simple-table process-list">{processes.length === 0 ? <div className="empty-state">No processes were visible to the scanner.</div> : processRows}</div></div>
+        <div className="result-section">
+          <div className="result-heading"><h3>Process & executable-memory inspection</h3><span>{String(processInspectionSummary.processes_inspected ?? 0)} PROCESSES INSPECTED</span></div>
+          <div className="resource-grid">
+            <Resource label="PROCESSES INSPECTED" value={String(processInspectionSummary.processes_inspected ?? 0)} detail={processInspectionSummary.processes_truncated ? "Process limit reached; inventory is partial" : "Visible to SENTINEL"} />
+            <Resource label="MAPPING ENTRIES" value={String(processInspectionSummary.mapping_entries_read ?? 0)} detail={processInspectionSummary.mappings_truncated ? "Mapping limit reached" : "Executable mapping metadata"} />
+            <Resource label="INDICATORS" value={String(processInspectionSummary.indicators ?? 0)} detail="Suspicious leads requiring investigation" />
+            <Resource label="INACCESSIBLE" value={String(processInspectionSummary.processes_inaccessible ?? 0)} detail="Permission or process-exit race" />
+          </div>
+          <p className="history-note">Read-only metadata inspection. SENTINEL does not collect command lines or read process memory contents. Anonymous executable mappings, memfd objects and deleted executables can be legitimate; none is treated as confirmed malware by itself.</p>
+          {processIndicators.length > 0 ? <div className="simple-table inventory-list">{processIndicators.map((item, index) => <div className="simple-row" key={String(item.id ?? index)} style={{gridTemplateColumns:"1fr auto"}}>
+            <strong>{String(item.title ?? "Process indicator")}</strong>
+            <small>{String(item.process_name ?? "Unknown process")} · PID {String(item.pid ?? "—")} · {String(item.confidence ?? "unknown")} confidence</small>
+            <span>{String(item.evidence ?? "No evidence string supplied")}</span>
+          </div>)}</div> : <div className="empty-state">No process or executable-memory indicators were observed within the inspected scope. This does not prove the host is free of fileless malware.</div>}
+          <details className="inventory-details"><summary>Inspected process details · {inspectedProcesses.length} records</summary>
+            <div className="simple-table inventory-list">{inspectedProcesses.slice(0, 100).map((item, index) => <div className="simple-row" key={String(item.pid ?? index)} style={{gridTemplateColumns:"1fr auto"}}>
+              <strong>{String(item.name ?? "Unknown")} · PID {String(item.pid ?? "—")}</strong>
+              <small>PPID {String(item.ppid ?? "—")} · {String(item.user ?? "unknown user")} · RSS {bytes(Number(item.memory_rss_bytes ?? 0))}</small>
+              <span>{String(item.executable ?? "Executable path unavailable")}</span>
+            </div>)}</div>
+          </details>
+          <p className="history-note">{asArray<string>(processInspection.limitations).join(" ")}</p>
+        </div>
 
         {assessmentSummary.files_hashed !== undefined && <div className="result-section">
           <div className="result-heading"><h3>Security assessment report</h3><button className="button button-secondary" onClick={() => downloadJson(`sentinel-host-report-${scan?.id ?? "latest"}.json`, { scan, security_assessment: assessment })}>Export JSON report ↓</button></div>
@@ -760,7 +787,9 @@ function IntegrationSettingsView() {
   async function save(provider: keyof typeof keys, clear = false) {
     setBusyProvider(provider); setError(""); setMessage("");
     try {
-      const update: Partial<typeof keys> = {};\n      update[provider] = clear ? "" : keys[provider];\n      const result = await api.saveIntegrationKeys(update);
+      const update: Partial<typeof keys> = {};
+      update[provider] = clear ? "" : keys[provider];
+      const result = await api.saveIntegrationKeys(update);
       setStatus(result);
       setKeys((current) => ({ ...current, [provider]: "" }));
       setMessage(clear ? providers.find((item) => item.id === provider)?.name + " key cleared." : providers.find((item) => item.id === provider)?.name + " key saved locally.");
