@@ -82,3 +82,10 @@ def save_provider_keys(values: dict[str, str | None]) -> dict:
         if os.path.exists(temporary):
             os.unlink(temporary)
     return provider_status()
+
+def provider_key(provider: str) -> str:
+    """Read one configured provider key for backend integrations only."""
+    if provider not in PROVIDERS:
+        return ""
+    environment_value = os.environ.get(ENV_NAMES[provider], "").strip()
+    return environment_value or _read().get(provider, "").strip()
