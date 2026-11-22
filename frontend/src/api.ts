@@ -28,6 +28,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 export const api = {
+  integrationKeys: () => request<IntegrationKeysStatus>("/api/integrations/keys"),
+  saveIntegrationKeys: (keys: { malwarebazaar?: string; virustotal?: string; malwarebytes?: string }) =>
+    request<IntegrationKeysStatus>("/api/integrations/keys", { method: "PUT", body: JSON.stringify(keys) }),
+
   alerts: () => request<{ items: AlertRecord[]; total: number }>("/api/alerts?limit=50"),
   updateAlert: (id: string, status: "acknowledged" | "resolved") =>
     request<AlertRecord>(`/api/alerts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ status }) }),
@@ -56,3 +60,9 @@ export const api = {
   restoreQuarantine: (id: string) =>
     request<Record<string, unknown>>(`/api/quarantine/${encodeURIComponent(id)}/restore`, { method: "POST" }),
 };
+
+export interface IntegrationProviderState { configured: boolean; storage: "environment" | "local_file" | "none"; }
+export interface IntegrationKeysStatus {
+  providers: { malwarebazaar: IntegrationProviderState; virustotal: IntegrationProviderState; malwarebytes: IntegrationProviderState };
+  storage_note: string;
+}
