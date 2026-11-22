@@ -6,6 +6,19 @@ from app import host_assessment, threat_intel
 
 
 @pytest.fixture(autouse=True)
+def disable_process_inspection_for_host_scan(monkeypatch):
+    monkeypatch.setattr(host_assessment, "inspect_processes", lambda: {
+        "summary": {
+            "processes_observed": 0, "processes_inspected": 0,
+            "processes_inaccessible": 0, "mapping_entries_read": 0,
+            "processes_truncated": False, "mappings_truncated": False,
+            "indicators": 0, "indicator_counts": {},
+        },
+        "processes": [], "indicators": [], "limitations": [],
+    })
+
+
+@pytest.fixture(autouse=True)
 def disable_live_circl_for_host_scan(monkeypatch):
     monkeypatch.setattr(host_assessment, "lookup_circl_hashes", lambda hashes: {
         "provider": "CIRCL hashlookup", "status": "disabled", "matches": [],
@@ -379,3 +392,45 @@ def test_host_assessment_reports_circl_context_separately_from_malware(tmp_path,
     assert result["threat_intelligence"]["circl_hashlookup"]["known_file_matches"] == 1
     assert result["threat_intelligence"]["known_file_context"][0]["sha256"] == digest
     assert not any(item.get("source") == "circl_hashlookup" for item in result["findings"])
+
+
+
+def test_host_assessment_includes_process_memory_indicators(tmp_path, monkeypatch):
+    monkeypatch.setenv("SENTINEL_HASH_DB", str(tmp_path / "missing.json"))
+    monkeypatch.setattr(host_assessment, "fetch_recent_malware", lambda: {"status": "not_configured"})
+    monkeypatch.setattr(host_assessment, "_security_posture", lambda: {"checks": [], "firewall_tools": []})
+    monkeypatch.setattr(host_assessment, "_clamav_scan", lambda root, **kwargs: {
+        "available": False, "executed": False, "findings": [], "note": "mocked"
+    })
+    monkeypatch.setattr(host_assessment, "inspect_processes", lambda: {
+        "summary": {
+            "processes_observed": 1, "processes_inspected": 1,
+            "processes_inaccessible": 0, "mapping_entries_read": 4,
+            "processes_truncated": False, "mappings_truncated": False,
+            "indicators": 1, "indicator_counts": {"anonymous_executable_mapping": 1},
+        },
+        "processes": [{"pid": 4242, "name": "fixture-service"}],
+        "indicators": [{
+            "id": "process-4242-anonymous",
+            "category": "process_memory",
+            "severity": "low",
+            "title": "Anonymous executable memory mapping observed",
+            "description": "Investigation lead only.",
+            "evidence": "1000-2000 r-xp [anonymous]",
+            "confidence": "low",
+            "assessment": "suspicious_unconfirmed",
+            "source": "linux_process_memory_inspection",
+            "pid": 4242,
+            "process_name": "fixture-service",
+            "executable": "/usr/bin/fixture-service",
+        }],
+        "limitations": ["Process memory contents were not read."],
+    })
+
+    result = host_assessment.run_host_assessment(str(tmp_path), max_files=20, max_seconds=5)
+
+    assert result["process_inspection"]["summary"]["processes_inspected"] == 1
+    finding = next(item for item in result["findings"] if item["source"] == "linux_process_memory_inspection")
+    assert finding["assessment"] == "suspicious_unconfirmed"
+    assert result["summary"]["process_memory_indicators"] == 1
+    assert "Process memory contents were not read." in result["limitations"]
