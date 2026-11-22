@@ -233,7 +233,8 @@ export default function App() {
 
 function Landing({ health, onEnter, onOpen }: { health: "checking" | "online" | "offline"; onEnter: () => void; onOpen: (view: View) => void }) {
   const sections = navItems.filter((item) => item.id !== "home");
-  const descriptions: Record<Exclude<View, "home">, string> = {
+  const descriptions: Record<View, string> = {
+    home: "Open the local security operations workspace.",
     overview: "Review current events, scan history and host posture.",
     events: "Search and filter locally collected security events.",
     alerts: "Triage detections and track their resolution state.",
