@@ -110,7 +110,14 @@ def _provider_config(provider: str, values: dict[str, str]) -> tuple[bool, str]:
 
 
 def _verification_state() -> dict:
-    return _read(VERIFY_PATH, set(PROVIDERS))
+    try:
+        raw = json.loads(VERIFY_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {key: value for key, value in raw.items()
+            if key in PROVIDERS and isinstance(value, dict)}
 
 
 def provider_status() -> dict:
