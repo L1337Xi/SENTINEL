@@ -760,7 +760,7 @@ function IntegrationSettingsView() {
   async function save(provider: keyof typeof keys, clear = false) {
     setBusyProvider(provider); setError(""); setMessage("");
     try {
-      const result = await api.saveIntegrationKeys({ [provider]: clear ? "" : keys[provider] });
+      const update: Partial<typeof keys> = {};\n      update[provider] = clear ? "" : keys[provider];\n      const result = await api.saveIntegrationKeys(update);
       setStatus(result);
       setKeys((current) => ({ ...current, [provider]: "" }));
       setMessage(clear ? providers.find((item) => item.id === provider)?.name + " key cleared." : providers.find((item) => item.id === provider)?.name + " key saved locally.");
