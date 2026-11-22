@@ -9,7 +9,6 @@ import base64
 import json
 import os
 import tempfile
-import time
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -255,7 +254,7 @@ def _verify_malwarebytes(values: dict[str, str]) -> dict:
     account_id = values.get("malwarebytes_account_id", "")
     if not all((client_id, client_secret, account_id)):
         return {"status": "incomplete", "message": "Malwarebytes requires Client ID, Client Secret and Account ID."}
-    encoded = base64.b64encode(f"{client_id}:{client_secret}".encode("utf-8")).decode("ascii")
+    encoded = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode("ascii")
     body = urlencode({"grant_type": "client_credentials", "scope": "read"}).encode("ascii")
     status, payload = _request(
         "https://api.malwarebytes.com/oauth2/token", method="POST", body=body,
