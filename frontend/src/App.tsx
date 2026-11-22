@@ -792,8 +792,8 @@ function IntegrationSettingsView() {
   const [busyProvider, setBusyProvider] = useState("");
   const providers = [
     { id: "malwarebazaar" as const, name: "MalwareBazaar", description: "Recent malware hash feed used by Host Assessment. Verification calls the official recent-feed API.", helpLabel: "Get free Auth-Key", helpUrl: "https://auth.abuse.ch/" },
-    { id: "virustotal" as const, name: "VirusTotal", description: "File reputation lookup by SHA-256. Public API use is restricted to eligible non-commercial use; commercial deployment requires an appropriate VirusTotal licence.", helpLabel: "Get API key", helpUrl: "https://www.virustotal.com/gui/my-apikey" },
-    { id: "malwarebytes" as const, name: "Malwarebytes Nebula", description: "Cloud endpoint-security account integration. Requires an OAuth Client ID, Client Secret and Account ID. It is not a local-file antivirus engine.", helpLabel: "Nebula API documentation", helpUrl: "https://api.malwarebytes.com/nebula/v1/docs" },
+    { id: "virustotal" as const, name: "VirusTotal", description: "Live API-key verification is implemented. Host Assessment hash enrichment is not enabled yet; commercial use requires an appropriate VirusTotal licence.", helpLabel: "Get API key", helpUrl: "https://www.virustotal.com/gui/my-apikey" },
+    { id: "malwarebytes" as const, name: "Malwarebytes Nebula", description: "Live OAuth and Nebula account verification are implemented. Endpoint-event ingestion is a separate cloud integration, not a local-file antivirus engine.", helpLabel: "Nebula API documentation", helpUrl: "https://api.malwarebytes.com/nebula/v1/docs" },
   ] as const;
   const load = useCallback(async () => {
     try { setStatus(await api.integrationKeys()); setError(""); }
