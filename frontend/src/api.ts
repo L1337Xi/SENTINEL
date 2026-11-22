@@ -65,7 +65,7 @@ export const api = {
 
 export interface IntegrationProviderState {
   configured: boolean;
-  configuration: "configured" | "incomplete_credentials" | "missing";
+  configuration: "configured" | "incomplete_credentials" | "legacy_single_key" | "missing";
   storage: "environment" | "local_file" | "none";
   verification: { status: string; message: string; checked_at?: string; http_status?: number };
 }
