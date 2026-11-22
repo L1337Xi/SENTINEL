@@ -52,7 +52,7 @@ from .file_response import (
     restore_quarantined,
 )
 from .host_assessment import run_host_assessment
-from .integration_settings import provider_status, save_provider_keys
+from .integration_settings import provider_status, save_provider_keys, verify_provider
 from .scanner import network_discovery, system_inventory, validate_local_network
 from .schemas import (
     AlertUpdate,
@@ -100,7 +100,9 @@ def get_edition() -> dict:
 class IntegrationKeysUpdate(BaseModel):
     malwarebazaar: str | None = Field(default=None, max_length=512)
     virustotal: str | None = Field(default=None, max_length=512)
-    malwarebytes: str | None = Field(default=None, max_length=512)
+    malwarebytes_client_id: str | None = Field(default=None, max_length=512)
+    malwarebytes_client_secret: str | None = Field(default=None, max_length=512)
+    malwarebytes_account_id: str | None = Field(default=None, max_length=512)
 
 
 @app.get("/api/integrations/keys", tags=["integrations"])
@@ -116,6 +118,15 @@ def put_integration_keys(payload: IntegrationKeysUpdate) -> dict:
         return save_provider_keys(payload.model_dump(exclude_unset=True))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/integrations/{provider}/verify", tags=["integrations"])
+def verify_integration_provider(provider: str) -> dict:
+    """Perform a bounded authenticated request against the provider's official API."""
+    try:
+        return verify_provider(provider)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/api/health", tags=["system"])
