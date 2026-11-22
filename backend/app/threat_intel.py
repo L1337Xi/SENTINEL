@@ -61,7 +61,8 @@ def _write_cache(cache: dict) -> None:
 
 def fetch_recent_malware(*, force_refresh: bool = False) -> dict:
     """Fetch or reuse MalwareBazaar's latest 100 additions (one-hour cache)."""
-    from .integration_settings import provider_key\n    api_key = provider_key("malwarebazaar")
+    from .integration_settings import provider_key
+    api_key = provider_key("malwarebazaar")
     if not api_key:
         return {
             "provider": "MalwareBazaar", "status": "not_configured", "enabled": False,
