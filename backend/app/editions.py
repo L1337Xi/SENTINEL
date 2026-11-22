@@ -19,7 +19,7 @@ _FEATURES: tuple[dict[str, Any], ...] = (
     {"id": "network_discovery", "name": "Scoped network discovery", "tier": NORMAL, "status": "available", "description": "Discovery limited to an attached private IPv4 network."},
     {"id": "events_alerts_cases", "name": "Events, alerts and cases", "tier": NORMAL, "status": "available", "description": "Local event intake, initial detections, alert lifecycle and case workflow."},
     {"id": "software_vulnerability_intel", "name": "Software vulnerability intelligence", "tier": NORMAL, "status": "planned", "description": "Installed-package inventory, advisories, fixed versions and end-of-life checks."},
-    {"id": "process_memory_inspection", "name": "Process and memory inspection", "tier": NORMAL, "status": "planned", "description": "Read-only process metadata and memory-mapping inspection."},
+    {"id": "process_memory_inspection", "name": "Process and executable-memory inspection", "tier": NORMAL, "status": "available", "description": "Bounded read-only process metadata, executable mappings, deleted executables, memfd indicators and process-associated network metadata; no memory contents or command lines are collected."},
     {"id": "continuous_monitoring", "name": "Continuous monitoring", "tier": ADVANCED, "status": "planned", "description": "Ongoing endpoint telemetry and detection."},
     {"id": "advanced_fileless_detection", "name": "Advanced fileless detection", "tier": ADVANCED, "status": "planned", "description": "Correlated process, memory, execution and network indicators."},
     {"id": "behaviour_detection", "name": "Behaviour-based detection", "tier": ADVANCED, "status": "planned", "description": "Correlated activity detections with explainable evidence."},
