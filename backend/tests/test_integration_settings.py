@@ -128,3 +128,24 @@ def test_malwarebytes_verification_checks_oauth_and_account(monkeypatch):
     assert calls[1][0] == "https://api.malwarebytes.com/nebula/v1/account"
     assert calls[1][1]["headers"]["Authorization"] == "Bearer temporary-token"
     assert calls[1][1]["headers"]["accountid"] == "account-123"
+
+
+
+def test_legacy_malwarebytes_single_key_is_not_treated_as_configured(tmp_path, monkeypatch):
+    path = tmp_path / "keys.json"
+    path.write_text(json.dumps({"malwarebytes": "old-random-key"}), encoding="utf-8")
+    monkeypatch.setattr(integration_settings, "SETTINGS_PATH", path)
+    monkeypatch.setattr(integration_settings, "VERIFY_PATH", tmp_path / "verify.json")
+    _clear_provider_environment(monkeypatch)
+
+    state = integration_settings.provider_status()["providers"]["malwarebytes"]
+    assert state["configured"] is False
+    assert state["configuration"] == "legacy_single_key"
+    assert state["verification"]["status"] == "legacy_key_unsupported"
+
+    integration_settings.save_provider_keys({
+        "malwarebytes_client_id": "",
+        "malwarebytes_client_secret": "",
+        "malwarebytes_account_id": "",
+    })
+    assert json.loads(path.read_text()) == {}
