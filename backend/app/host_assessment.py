@@ -22,6 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .file_response import investigate_file
 from .process_inspection import inspect_processes
 from .threat_intel import fetch_recent_malware, lookup_circl_hashes, match_recent_hashes
 
@@ -368,6 +369,87 @@ def _security_posture() -> dict[str, Any]:
             checks.append({"id": "ssh-root-login", "severity": "info", "status": "not-assessed", "title": "SSH configuration unreadable", "evidence": "Permission denied or file unavailable"})
     return {"checks": checks, "firewall_tools": firewall_tools}
 
+
+def _automatic_verify_malware_findings(findings: list[dict[str, Any]]) -> dict[str, int]:
+    """Attach bounded, evidence-led verification to each file-backed malware finding."""
+    malware = [item for item in findings if item.get("category") == "malware"]
+    by_hash: dict[str, set[str]] = {}
+    for item in malware:
+        digest = str(item.get("sha256") or "").lower()
+        if re.fullmatch(r"[a-f0-9]{64}", digest):
+            by_hash.setdefault(digest, set()).add(str(item.get("source") or "unknown"))
+
+    counts = {"likely_false_positive": 0, "strong_malware_indicator": 0,
+              "suspicious_needs_review": 0, "inconclusive": 0}
+    for finding in malware:
+        path = finding.get("path")
+        digest = str(finding.get("sha256") or "").lower()
+        sources = sorted(by_hash.get(digest, set())) if digest else []
+        checks: list[dict[str, str]] = []
+        try:
+            if not path or not re.fullmatch(r"[a-f0-9]{64}", digest):
+                raise ValueError("Finding has no file path and SHA-256 for verification.")
+            report = investigate_file(str(path), digest)
+            package = report.get("package", {})
+            package_verified = package.get("owned") is True and package.get("integrity") == "verified"
+            source_is_strong = any(source in {"local_hash_indicator", "malwarebazaar"} for source in sources)
+            independent_sources = len(set(sources)) > 1
+
+            checks.append({"name": "file_identity", "status": "passed",
+                           "detail": f"Current SHA-256 matches scan evidence: {digest}"})
+            checks.append({"name": "package_integrity",
+                           "status": "passed" if package_verified else "not_confirmed",
+                           "detail": (f"Owned by {package.get('package')} and available package checks match."
+                                      if package_verified else "Trusted package ownership and integrity were not both confirmed.")})
+            checks.append({"name": "detection_corroboration",
+                           "status": "corroborated" if independent_sources else "single_source",
+                           "detail": "Detection sources: " + ", ".join(sources or ["unknown"])})
+            if source_is_strong:
+                verdict = "strong_malware_indicator"
+                confidence = "high" if independent_sources else "medium"
+                rationale = ("An exact malware hash indicator is present. " +
+                             ("Multiple detection sources agree, but this is still an indicator rather than proof of execution."
+                              if independent_sources else
+                              "This is a strong lead, but one source alone does not establish infection."))
+            elif package_verified and str(finding.get("source")) == "clamav":
+                verdict = "likely_false_positive"
+                confidence = "high"
+                rationale = ("ClamAV detected this file, but package ownership and available package integrity checks match. "
+                             "This supports a likely false positive; the signature and evidence are retained.")
+            elif package.get("owned") and package.get("integrity") == "mismatch":
+                verdict = "suspicious_needs_review"
+                confidence = "medium"
+                rationale = "The file is package-managed but an available integrity check did not match. This needs manual review."
+            elif independent_sources:
+                verdict = "suspicious_needs_review"
+                confidence = "medium"
+                rationale = "Multiple detection sources reported this file. Preserve it and review the evidence before response."
+            else:
+                verdict = "inconclusive"
+                confidence = "low"
+                rationale = "Available evidence is insufficient to confirm malware or a false positive."
+            finding["automatic_verification"] = {
+                "status": "completed", "verdict": verdict, "confidence": confidence,
+                "rationale": rationale, "checks": checks,
+                "file_evidence": report, "verified_at": datetime.now(UTC).isoformat(),
+                "limitations": ["No sample was executed or uploaded.",
+                                "A clean package check or absent hash match does not prove a file is safe.",
+                                "Strong hash indicators are not treated as proof of execution or compromise."],
+            }
+        except (OSError, ValueError, PermissionError) as exc:
+            verdict = "inconclusive"
+            finding["automatic_verification"] = {
+                "status": "incomplete", "verdict": verdict, "confidence": "low",
+                "rationale": f"Automatic verification could not complete: {str(exc)[:240]}",
+                "checks": [{"name": "file_identity", "status": "not_verified",
+                            "detail": "The current file could not be safely inspected."}],
+                "verified_at": datetime.now(UTC).isoformat(),
+                "limitations": ["Original detection retained; no remediation was performed."],
+            }
+        counts[verdict] = counts.get(verdict, 0) + 1
+    return counts
+
+
 def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
                         max_file_bytes: int = MAX_FILE_BYTES,
                         max_seconds: int = MAX_SECONDS,
@@ -503,6 +585,7 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
     report_progress("process_memory", None, force=True)
     process_inspection = inspect_processes()
     findings.extend(process_inspection["indicators"])
+    automatic_verification = _automatic_verify_malware_findings(findings)
     findings.extend({
         "id": check["id"], "category": "configuration", "severity": check["severity"],
         "title": check["title"], "description": check["evidence"],
@@ -521,6 +604,7 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
             "files_seen": files_seen, "files_hashed": files_hashed, "bytes_hashed": bytes_hashed,
             "findings": len(findings), "malware_matches": sum(1 for item in findings if item["category"] == "malware"),
             "configuration_findings": sum(1 for item in findings if item["category"] == "configuration"),
+            "automatic_verification": automatic_verification,
             "processes_inspected": process_inspection["summary"]["processes_inspected"],
             "process_memory_indicators": process_inspection["summary"]["indicators"],
             "truncated": truncated,
