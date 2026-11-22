@@ -11,6 +11,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+import time
 
 import psutil
 
@@ -19,6 +20,7 @@ MAX_MAPS_PER_PROCESS = 256
 MAX_TOTAL_MAPS = 10000
 MAX_INDICATORS = 500
 MAX_REMOTE_ENDPOINTS = 8
+MAX_PROCESS_SECONDS = 15
 SUSPICIOUS_EXECUTABLE_ROOTS = ("/tmp/", "/var/tmp/", "/dev/shm/")
 MAP_LINE = re.compile(
     r"^([0-9a-f]+)-([0-9a-f]+)\s+([rwxps-]{4})\s+"
@@ -58,9 +60,11 @@ def inspect_processes(
     *,
     max_processes: int = MAX_PROCESSES,
     max_total_maps: int = MAX_TOTAL_MAPS,
+    max_seconds: float = MAX_PROCESS_SECONDS,
 ) -> dict[str, Any]:
     """Collect bounded process metadata and executable mapping indicators."""
     started = datetime.now(UTC).isoformat()
+    started_monotonic = time.monotonic()
     process_rows: list[dict[str, Any]] = []
     indicators: list[dict[str, Any]] = []
     map_count = 0
@@ -68,6 +72,7 @@ def inspect_processes(
     inaccessible = 0
     observed = 0
     processes_truncated = False
+    time_budget_exceeded = False
     connections_by_pid: dict[int, list[str]] = defaultdict(list)
     try:
         connections = psutil.net_connections(kind="inet")
@@ -83,6 +88,9 @@ def inspect_processes(
                 connections_by_pid[connection.pid].append(endpoint)
 
     for process in psutil.process_iter():
+        if time.monotonic() - started_monotonic >= max_seconds:
+            time_budget_exceeded = True
+            break
         if observed >= max_processes:
             processes_truncated = True
             break
@@ -151,6 +159,13 @@ def inspect_processes(
                     "evidence": f'{mapping["address"]} {mapping["permissions"]} [anonymous]'[:500],
                     "confidence": "low",
                 })
+            if "w" in mapping["permissions"] and "x" in mapping["permissions"]:
+                process_indicators.append({
+                    "id": "writable_executable_mapping",
+                    "title": "Writable and executable memory mapping observed",
+                    "evidence": f'{mapping["address"]} {mapping["permissions"]} {mapped_path}'[:500],
+                    "confidence": "low",
+                })
             elif mapped_path.endswith(" (deleted)"):
                 process_indicators.append({
                     "id": "deleted_executable_mapping",
@@ -214,6 +229,7 @@ def inspect_processes(
             "max_processes": max_processes,
             "max_mapping_entries": max_total_maps,
             "max_maps_per_process": MAX_MAPS_PER_PROCESS,
+            "max_seconds": max_seconds,
             "process_command_lines_collected": False,
             "process_memory_contents_read": False,
         },
@@ -223,6 +239,7 @@ def inspect_processes(
             "processes_inaccessible": inaccessible,
             "mapping_entries_read": map_count,
             "processes_truncated": processes_truncated,
+            "time_budget_exceeded": time_budget_exceeded,
             "mappings_truncated": maps_truncated,
             "indicators": len(indicators),
             "indicator_counts": dict(counts),
@@ -234,7 +251,7 @@ def inspect_processes(
             "Command lines are intentionally excluded because they can contain passwords, tokens and other secrets.",
             "Anonymous executable mappings, memfd objects and deleted executables can be legitimate; indicators require investigation and are not malware verdicts.",
             "Visibility depends on the permissions of the SENTINEL service account and the host kernel.",
-            "Process and mapping counts are bounded; a truncated result is not a complete inventory.",
+            "Process count, mapping count and elapsed time are bounded; a truncated result is not a complete inventory.",
             "Network endpoints are metadata observed from the local socket table; encrypted payloads are not inspected.",
         ],
     }
