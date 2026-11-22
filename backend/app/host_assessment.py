@@ -381,7 +381,16 @@ def _automatic_verify_malware_findings(findings: list[dict[str, Any]]) -> dict[s
 
     counts = {"likely_false_positive": 0, "strong_malware_indicator": 0,
               "suspicious_needs_review": 0, "inconclusive": 0}
-    for finding in malware:
+    for index, finding in enumerate(malware):
+        if index >= 100:
+            verdict = "inconclusive"
+            finding["automatic_verification"] = {
+                "status": "not_run", "verdict": verdict, "confidence": "low",
+                "rationale": "Automatic verification limit reached (100 findings per scan); review this finding manually.",
+                "checks": [], "limitations": ["Original detection retained; no remediation was performed."],
+            }
+            counts[verdict] += 1
+            continue
         path = finding.get("path")
         digest = str(finding.get("sha256") or "").lower()
         sources = sorted(by_hash.get(digest, set())) if digest else []
@@ -585,6 +594,7 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
     report_progress("process_memory", None, force=True)
     process_inspection = inspect_processes()
     findings.extend(process_inspection["indicators"])
+    report_progress("automatic_verification", None, force=True)
     automatic_verification = _automatic_verify_malware_findings(findings)
     findings.extend({
         "id": check["id"], "category": "configuration", "severity": check["severity"],
