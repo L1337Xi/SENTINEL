@@ -481,13 +481,12 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
   return <>
     <PageHeading eyebrow="ASSESSMENT / LOCAL HOST" title="Host assessment" description="Read-only inventory of the machine running the SENTINEL backend.">
       <ActionButton onClick={onStart} disabled={busy}>↻ Run assessment</ActionButton>
+      <button className="button button-danger" onClick={onClearHistory} disabled={deletableHostScans.length === 0}>Clear completed history</button>
     </PageHeading>
     <div className="scope-note host-scope"><span className="scope-mark">i</span><p>This performs a bounded, read-only local assessment: host inventory, SHA-256 file hashing against local indicators and optional MalwareBazaar/CIRCL hash intelligence, static script-pattern review and selected security-configuration checks. CIRCL lookups send only SHA-256 hashes; the MalwareBazaar integration retrieves feed metadata. File contents and local paths are never uploaded. The assessment itself is read-only. Investigation adds package and file evidence; quarantine or deletion are separate, explicit response actions with safeguards. File-count, size and time limits apply; a clean result does not prove the system is malware-free.</p></div>
     <section className="panel full-panel scan-panel"><div className="panel-title"><div><div className="eyebrow">ASSESSMENT STATUS</div><h2>Latest host inventory</h2></div><span className="section-note">{hostScans.length} TOTAL RUNS</span></div><ScanHeader scan={scan} />
       <section className="host-history" aria-label="Previous host assessment results">
-        <div className="result-heading"><div><h3>Previous scan history</h3><span>{hostScans.length} SAVED RESULTS</span></div>
-          <button className="button button-danger" onClick={onClearHistory} disabled={deletableHostScans.length === 0}>Clear completed history</button>
-        </div>
+        <div className="result-heading"><div><h3>Previous scan history</h3><span>{hostScans.length} SAVED RESULTS</span></div></div>
         {hostScans.length === 0 ? <div className="empty-state">No previous host assessment results.</div> : hostScans.map((item) => (
           <div className="host-history-row" key={item.id}>
             <div className="host-history-info"><strong>{item.target}</strong><small>{formatDate(item.started_at)} · {statusLabel(item.status)}</small></div>
