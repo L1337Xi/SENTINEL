@@ -7,11 +7,11 @@ Indicators are investigation leads, not standalone malware verdicts.
 from __future__ import annotations
 
 import re
+import time
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-import time
 
 import psutil
 
