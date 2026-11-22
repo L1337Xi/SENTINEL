@@ -617,13 +617,18 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
               const inferred = capabilities.filter((item) => item.path === finding.path);
               const labels = [...mapped, ...inferred];
               const findingId = String(finding.id ?? index);
-              const investigation = asObject(investigations[findingId] ?? finding.investigation);
+              const automaticVerification = asObject(finding.automatic_verification);
+              const automaticVerdict = String(automaticVerification.verdict ?? "not_run");
+              const automaticChecks = asArray<Record<string, unknown>>(automaticVerification.checks);
+              const automaticFileEvidence = asObject(automaticVerification.file_evidence);
+              const investigation = asObject(investigations[findingId] ?? finding.investigation ?? automaticFileEvidence);
               const responseAction = asObject(finding.response_action);
               const hasResponseAction = Boolean(finding.response_action) && responseAction.action !== "restored";
               const packageInfo = asObject(investigation.package);
               const assessmentInfo = asObject(investigation.assessment);
               const hasInvestigation = Boolean(investigation.assessment);
               const isPackageManaged = packageInfo.owned === true;
+              const autoBlocksQuarantine = automaticVerdict === "likely_false_positive";
               return <div className="capability-report" key={findingId}>
                 <div className="capability-flow">
                   <div className="flow-node"><small>FILE / SAMPLE</small><strong>{String(finding.title ?? "Detected file")}</strong><span>{String(finding.path ?? "Path unavailable")}</span></div>
@@ -633,16 +638,24 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
                   <div className="flow-node"><small>CAPABILITY EVIDENCE</small><strong>{labels.length ? labels.map((item) => String(item.label ?? item.id ?? "Indicator")).join(", ") : "Not established"}</strong><span>{labels.length ? "Static indicators; not runtime proof" : "No capability metadata available for this detection"}</span></div>
                 </div>
                 {typeof finding.sha256 === "string" && <small className="hash-line">SHA-256 · {finding.sha256}</small>}
+                {automaticVerification.status ? <div className="scope-note">
+                  <span className="scope-mark">✓</span>
+                  <div><p><strong>AUTOMATIC VERIFICATION · {automaticVerdict.replace(/_/g, " ").toUpperCase()} · {String(automaticVerification.confidence ?? "unknown").toUpperCase()} CONFIDENCE</strong></p>
+                    <p>{String(automaticVerification.rationale ?? "Verification details are unavailable.")}</p>
+                    {automaticChecks.map((check, checkIndex) => <p key={String(check.name ?? checkIndex)}><strong>{String(check.name ?? "Check").replace(/_/g, " ")}:</strong> {String(check.status ?? "unknown")} — {String(check.detail ?? "")}</p>)}
+                    {asArray<string>(automaticVerification.limitations).map((note, noteIndex) => <p key={noteIndex}>{note}</p>)}
+                  </div>
+                </div> : <p className="history-note">Automatic verification was not available for this saved finding. Run a new Host Assessment.</p>}
                 <div className="finding-response-actions">
                   <button className="button button-secondary" onClick={() => void investigateFinding(finding)} disabled={responseBusy === findingId}>{responseBusy === findingId ? "Investigating…" : investigation.assessment ? "Re-investigate file" : "Investigate file"}</button>
-                  {hasInvestigation && <span className="history-protected">{String(assessmentInfo.verdict ?? "unverified").replace(/_/g, " ").toUpperCase()} · {String(assessmentInfo.confidence ?? "unknown")} CONFIDENCE</span>}
-                  <button className="button button-danger" onClick={() => void respondFinding(finding, "quarantine")} disabled={responseBusy === findingId || isPackageManaged || !finding.sha256 || hasResponseAction}>Quarantine</button>
-                  <button className="text-action history-delete" onClick={() => void respondFinding(finding, "delete")} disabled={responseBusy === findingId || isPackageManaged || !finding.sha256 || hasResponseAction}>Delete permanently</button>
+                  {hasInvestigation && <span className="history-protected">MANUAL CHECK · {String(assessmentInfo.verdict ?? "unverified").replace(/_/g, " ").toUpperCase()} · {String(assessmentInfo.confidence ?? "unknown")} CONFIDENCE</span>}
+                  <button className="button button-danger" onClick={() => void respondFinding(finding, "quarantine")} disabled={responseBusy === findingId || isPackageManaged || autoBlocksQuarantine || !finding.sha256 || hasResponseAction}>Quarantine</button>
+                  <button className="text-action history-delete" onClick={() => void respondFinding(finding, "delete")} disabled={responseBusy === findingId || isPackageManaged || autoBlocksQuarantine || !finding.sha256 || hasResponseAction}>Delete permanently</button>
                 </div>
                 {hasInvestigation && <div className="scope-note"><span className="scope-mark">i</span><p>{String(assessmentInfo.rationale ?? "")} {isPackageManaged ? `Package: ${String(packageInfo.package)} · Integrity: ${String(packageInfo.integrity)} · Provenance: ${String(packageInfo.provenance)}` : "No owning package was confirmed."} File type: {String(investigation.file_type ?? "unknown")}.</p></div>}
                 {Boolean(finding.response_action) && <p className="history-note">Response recorded: {String(responseAction.action ?? "completed")} · {formatDate(String(responseAction.occurred_at ?? ""))}</p>}
                 {responseMessages[findingId] && <p className="history-note">{responseMessages[findingId]}</p>}
-                {isPackageManaged && <p className="history-note">Package-managed file: SENTINEL disables quarantine and permanent deletion. Use the OS package manager after investigation.</p>}
+                {(isPackageManaged || autoBlocksQuarantine) && <p className="history-note">{autoBlocksQuarantine ? "Automatic verification supports a likely false positive. SENTINEL disables quarantine and deletion for this finding." : "Package-managed file: SENTINEL disables quarantine and permanent deletion. Use the OS package manager after investigation."}</p>}
               </div>;
             })}
             <div className="scope-note"><span className="scope-mark">i</span><p>Flow nodes distinguish a detection from its possible capabilities. Capabilities come only from local indicator metadata or low-confidence script-pattern matches; SENTINEL does not execute malware, so runtime behaviour is not verified.</p></div>
