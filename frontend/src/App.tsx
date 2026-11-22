@@ -786,49 +786,88 @@ function NetworkView({ networks, selected, setSelected, scan, scans, busy, onSta
 
 function IntegrationSettingsView() {
   const [status, setStatus] = useState<IntegrationKeysStatus | null>(null);
-  const [keys, setKeys] = useState({ malwarebazaar: "", virustotal: "", malwarebytes: "" });
+  const [keys, setKeys] = useState({ malwarebazaar: "", virustotal: "", malwarebytes_client_id: "", malwarebytes_client_secret: "", malwarebytes_account_id: "" });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busyProvider, setBusyProvider] = useState("");
   const providers = [
-    { id: "malwarebazaar" as const, name: "MalwareBazaar", description: "Recent malware hash feed. This provider is already integrated with Host Assessment.", helpLabel: "Get free Auth-Key", helpUrl: "https://auth.abuse.ch/" },
-    { id: "virustotal" as const, name: "VirusTotal", description: "Hash lookup integration is not implemented yet. VirusTotal's public API is prohibited in commercial products; a separate commercial licence is required for commercial use.", helpLabel: "Get API key", helpUrl: "https://www.virustotal.com/gui/my-apikey" },
-    { id: "malwarebytes" as const, name: "Malwarebytes", description: "Nebula business API access uses a client ID, client secret and account ID—not a single API key. SENTINEL's Malwarebytes integration is not implemented yet.", helpLabel: "API access & documentation", helpUrl: "https://api.malwarebytes.com/nebula/v1/docs" },
-  ];
+    { id: "malwarebazaar" as const, name: "MalwareBazaar", description: "Recent malware hash feed used by Host Assessment. Verification calls the official recent-feed API.", helpLabel: "Get free Auth-Key", helpUrl: "https://auth.abuse.ch/" },
+    { id: "virustotal" as const, name: "VirusTotal", description: "File reputation lookup by SHA-256. Public API use is restricted to eligible non-commercial use; commercial deployment requires an appropriate VirusTotal licence.", helpLabel: "Get API key", helpUrl: "https://www.virustotal.com/gui/my-apikey" },
+    { id: "malwarebytes" as const, name: "Malwarebytes Nebula", description: "Cloud endpoint-security account integration. Requires an OAuth Client ID, Client Secret and Account ID. It is not a local-file antivirus engine.", helpLabel: "Nebula API documentation", helpUrl: "https://api.malwarebytes.com/nebula/v1/docs" },
+  ] as const;
   const load = useCallback(async () => {
     try { setStatus(await api.integrationKeys()); setError(""); }
     catch (err) { setError(err instanceof Error ? err.message : "Could not load integration settings."); }
   }, []);
   useEffect(() => { void load(); }, [load]);
-  async function save(provider: keyof typeof keys, clear = false) {
+  async function save(provider: "malwarebazaar" | "virustotal" | "malwarebytes", clear = false) {
     setBusyProvider(provider); setError(""); setMessage("");
     try {
       const update: Partial<typeof keys> = {};
-      update[provider] = clear ? "" : keys[provider];
+      if (provider === "malwarebazaar" || provider === "virustotal") update[provider] = clear ? "" : keys[provider];
+      else {
+        update.malwarebytes_client_id = clear ? "" : keys.malwarebytes_client_id;
+        update.malwarebytes_client_secret = clear ? "" : keys.malwarebytes_client_secret;
+        update.malwarebytes_account_id = clear ? "" : keys.malwarebytes_account_id;
+      }
       const result = await api.saveIntegrationKeys(update);
       setStatus(result);
-      setKeys((current) => ({ ...current, [provider]: "" }));
-      setMessage(clear ? providers.find((item) => item.id === provider)?.name + " key cleared." : providers.find((item) => item.id === provider)?.name + " key saved locally.");
-    } catch (err) { setError(err instanceof Error ? err.message : "Could not save provider key."); }
+      setKeys((current) => provider === "malwarebazaar" || provider === "virustotal"
+        ? { ...current, [provider]: "" }
+        : { ...current, malwarebytes_client_id: "", malwarebytes_client_secret: "", malwarebytes_account_id: "" });
+      setMessage(clear ? provider + " credentials cleared." : provider + " credentials saved. Verify the connection to test them against the provider API.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not save provider credentials."); }
     finally { setBusyProvider(""); }
   }
+  async function verify(provider: "malwarebazaar" | "virustotal" | "malwarebytes") {
+    setBusyProvider(provider); setError(""); setMessage("");
+    try {
+      const result = await api.verifyIntegration(provider);
+      setStatus(result);
+      setMessage(provider + ": " + result.providers[provider].verification.message);
+    } catch (err) { setError(err instanceof Error ? err.message : "Provider verification failed."); }
+    finally { setBusyProvider(""); }
+  }
+  const verificationLabel = (value: string) => ({
+    verified: "CONNECTED · VERIFIED", invalid: "INVALID CREDENTIALS", rejected: "CREDENTIAL REJECTED",
+    access_denied: "ACCESS / LICENCE DENIED", account_or_scope_error: "ACCOUNT OR SCOPE ERROR",
+    rate_limited: "RATE LIMITED · NOT VERIFIED", unavailable: "PROVIDER UNAVAILABLE",
+    error: "VERIFICATION ERROR", not_verified: "NOT YET VERIFIED", incomplete: "INCOMPLETE CREDENTIALS",
+    not_configured: "NOT CONFIGURED",
+  }[value] ?? value.replace(/_/g, " ").toUpperCase());
   return <>
-    <PageHeading eyebrow="SYSTEM / INTEGRATIONS" title="API keys & integrations" description="Manage optional provider credentials stored by this local SENTINEL instance." />
+    <PageHeading eyebrow="SYSTEM / INTEGRATIONS" title="API keys & integrations" description="Save credentials locally, then verify authentication against each provider's live API." />
     <section className="panel full-panel integration-settings">
-      <div className="panel-title"><div><div className="eyebrow">THREAT INTELLIGENCE PROVIDERS</div><h2>Provider credentials</h2></div><span className="section-note">LOCAL CONFIGURATION</span></div>
+      <div className="panel-title"><div><div className="eyebrow">THREAT INTELLIGENCE PROVIDERS</div><h2>Provider credentials</h2></div><span className="section-note">LIVE API VERIFICATION</span></div>
       {providers.map((provider) => {
         const state = status?.providers[provider.id];
+        const verification = state?.verification;
+        const busy = busyProvider === provider.id;
         return <div className="integration-key-row" key={provider.id}>
-          <div className="integration-key-copy"><div><h3>{provider.name}</h3><span className={state?.configured ? "integration-state configured" : "integration-state"}>{state?.configured ? "KEY CONFIGURED" : "NOT CONFIGURED"}</span></div><p>{provider.description}</p><a className="integration-provider-link" href={provider.helpUrl} target="_blank" rel="noopener noreferrer">{provider.helpLabel} <span aria-hidden="true">↗</span></a></div>
+          <div className="integration-key-copy">
+            <div><h3>{provider.name}</h3><span className={verification?.status === "verified" ? "integration-state configured" : "integration-state"}>{verificationLabel(verification?.status ?? (state?.configured ? "not_verified" : "not_configured"))}</span></div>
+            <p>{provider.description}</p>
+            {verification?.message && <p className="history-note">{verification.message}</p>}
+            {verification?.checked_at && <p className="history-note">Last checked: {formatDate(verification.checked_at)}</p>}
+            <a className="integration-provider-link" href={provider.helpUrl} target="_blank" rel="noopener noreferrer">{provider.helpLabel} <span aria-hidden="true">↗</span></a>
+          </div>
           <div className="integration-key-controls">
-            <label><span>{state?.configured ? "REPLACE API KEY" : "API KEY"}</span><input type="password" autoComplete="new-password" spellCheck={false} value={keys[provider.id]} onChange={(event) => setKeys((current) => ({ ...current, [provider.id]: event.target.value }))} placeholder={state?.configured ? "Saved key is hidden" : "Paste provider API key"} /></label>
-            <div><button className="button button-secondary" disabled={busyProvider === provider.id || !keys[provider.id].trim()} onClick={() => void save(provider.id)}>{busyProvider === provider.id ? "Saving…" : "Save key"}</button><button className="text-action" disabled={busyProvider === provider.id || !state?.configured} onClick={() => void save(provider.id, true)}>Clear key</button></div>
+            {provider.id === "malwarebytes" ? <>
+              <label><span>CLIENT ID</span><input type="password" autoComplete="new-password" spellCheck={false} value={keys.malwarebytes_client_id} onChange={(event) => setKeys((current) => ({ ...current, malwarebytes_client_id: event.target.value }))} placeholder={state?.configured ? "Saved Client ID is hidden" : "Nebula OAuth Client ID"} /></label>
+              <label><span>CLIENT SECRET</span><input type="password" autoComplete="new-password" spellCheck={false} value={keys.malwarebytes_client_secret} onChange={(event) => setKeys((current) => ({ ...current, malwarebytes_client_secret: event.target.value }))} placeholder={state?.configured ? "Saved Client Secret is hidden" : "Nebula OAuth Client Secret"} /></label>
+              <label><span>ACCOUNT ID</span><input type="password" autoComplete="new-password" spellCheck={false} value={keys.malwarebytes_account_id} onChange={(event) => setKeys((current) => ({ ...current, malwarebytes_account_id: event.target.value }))} placeholder={state?.configured ? "Saved Account ID is hidden" : "Nebula Account ID"} /></label>
+            </> : <label><span>{state?.configured ? "REPLACE API KEY" : "API KEY"}</span><input type="password" autoComplete="new-password" spellCheck={false} value={keys[provider.id]} onChange={(event) => setKeys((current) => ({ ...current, [provider.id]: event.target.value }))} placeholder={state?.configured ? "Saved key is hidden" : "Paste provider API key"} /></label>}
+            <div>
+              <button className="button button-secondary" disabled={busy || (provider.id === "malwarebytes" ? !keys.malwarebytes_client_id.trim() || !keys.malwarebytes_client_secret.trim() || !keys.malwarebytes_account_id.trim() : !keys[provider.id].trim())} onClick={() => void save(provider.id)}>{busy ? "Working…" : "Save credentials"}</button>
+              <button className="button button-secondary" disabled={busy || !state?.configured} onClick={() => void verify(provider.id)}>Verify connection</button>
+              <button className="text-action" disabled={busy || !state?.configured} onClick={() => void save(provider.id, true)}>Clear</button>
+            </div>
           </div>
         </div>;
       })}
       {message && <p className="history-note">{message}</p>}
       {error && <p className="scan-error">{error}</p>}
-      <div className="scope-note"><span className="scope-mark">i</span><p>{status?.storage_note ?? "Credentials are stored locally with owner-only file permissions. They are not encrypted at rest. Never share API keys in screenshots, source control or chat."} Keys are never displayed again by this interface. MalwareBazaar uses its saved key in Host Assessment. VirusTotal and Malwarebytes credentials are saved for future integrations; saving a key does not activate scanning.</p></div>
+      <div className="scope-note"><span className="scope-mark">i</span><p>{status?.storage_note ?? "Credentials are stored locally with owner-only file permissions. They are not encrypted at rest. Never share API keys in screenshots, source control or chat."} Saving only stores credentials. SENTINEL shows CONNECTED only after a successful authenticated API request. Changing credentials resets verification. VirusTotal public API use is not permitted in commercial products; obtain the correct licence before commercial use. Malwarebytes Nebula verifies cloud account access and does not scan this local machine's files.</p></div>
     </section>
   </>;
 }
