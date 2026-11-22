@@ -1,8 +1,7 @@
 import hashlib
 
-from app import file_response
-
 import pytest
+from app import file_response
 
 
 def test_investigation_reports_verified_package_as_likely_false_positive(tmp_path, monkeypatch):
