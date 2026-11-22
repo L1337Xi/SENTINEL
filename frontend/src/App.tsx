@@ -430,6 +430,7 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
   const knownFileContext = asArray<Record<string, unknown>>(threatIntel.known_file_context);
   const persistence = asArray<Record<string, unknown>>(assessment.persistence_inventory);
   const processInspection = asObject(assessment.process_inspection);
+  const processInspectionAvailable = typeof processInspection.engine === "string";
   const processInspectionSummary = asObject(processInspection.summary);
   const processIndicators = asArray<Record<string, unknown>>(processInspection.indicators);
   const inspectedProcesses = asArray<Record<string, unknown>>(processInspection.processes);
@@ -545,6 +546,7 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
 
         <div className="result-section"><div className="result-heading"><h3>Process inventory</h3><span>{processes.length} DISPLAYED / {String(result.process_count ?? "—")} TOTAL</span></div><div className="simple-table process-list">{processes.length === 0 ? <div className="empty-state">No processes were visible to the scanner.</div> : processRows}</div></div>
         <div className="result-section">
+          {processInspectionAvailable ? <>
           <div className="result-heading"><h3>Process & executable-memory inspection</h3><span>{String(processInspectionSummary.processes_inspected ?? 0)} PROCESSES INSPECTED</span></div>
           <div className="resource-grid">
             <Resource label="PROCESSES INSPECTED" value={String(processInspectionSummary.processes_inspected ?? 0)} detail={processInspectionSummary.processes_truncated ? "Process limit reached; inventory is partial" : "Visible to SENTINEL"} />
@@ -566,6 +568,7 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
             </div>)}</div>
           </details>
           <p className="history-note">{asArray<string>(processInspection.limitations).join(" ")}</p>
+          </> : <div className="empty-state">This saved assessment predates process inspection. Run a new Host Assessment to collect process and executable-memory metadata.</div>}
         </div>
 
         {assessmentSummary.files_hashed !== undefined && <div className="result-section">
