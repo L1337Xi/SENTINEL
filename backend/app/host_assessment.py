@@ -22,6 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .process_inspection import inspect_processes
 from .threat_intel import fetch_recent_malware, lookup_circl_hashes, match_recent_hashes
 
 DEFAULT_EXCLUDES = {
@@ -499,6 +500,9 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
     posture = _security_posture()
     persistence = _persistence_inventory()
     accounts = _privileged_account_inventory()
+    report_progress("process_memory", None, force=True)
+    process_inspection = inspect_processes()
+    findings.extend(process_inspection["indicators"])
     findings.extend({
         "id": check["id"], "category": "configuration", "severity": check["severity"],
         "title": check["title"], "description": check["evidence"],
@@ -517,6 +521,8 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
             "files_seen": files_seen, "files_hashed": files_hashed, "bytes_hashed": bytes_hashed,
             "findings": len(findings), "malware_matches": sum(1 for item in findings if item["category"] == "malware"),
             "configuration_findings": sum(1 for item in findings if item["category"] == "configuration"),
+            "processes_inspected": process_inspection["summary"]["processes_inspected"],
+            "process_memory_indicators": process_inspection["summary"]["indicators"],
             "truncated": truncated,
         },
         "findings": findings,
@@ -524,6 +530,7 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
         "security_posture": posture,
         "persistence_inventory": persistence,
         "privileged_accounts": accounts,
+        "process_inspection": process_inspection,
         "malware_engines": {"clamav": {key: value for key, value in clamav.items() if key != "findings"}},
         "threat_intelligence": {
             "local_indicator_source": os.environ.get("SENTINEL_HASH_DB", "/etc/sentinel/hash_iocs.json"),
@@ -539,6 +546,7 @@ def run_host_assessment(root: str = "/", *, max_files: int = MAX_FILES,
             f"Files that could not be read: {skipped_unreadable}",
             "Directories such as /proc, /sys, /dev, /run, caches and dependency trees are excluded.",
             "Static script patterns are leads, not proof of execution or malicious intent.",
+            *process_inspection["limitations"],
             "A full filesystem scan may be truncated by the configured file-count or time budget.",
             "CIRCL receives only the bounded SHA-256 lookup values; local file paths and file contents are not transmitted.",
             "No files were executed, modified, quarantined, or uploaded.",
