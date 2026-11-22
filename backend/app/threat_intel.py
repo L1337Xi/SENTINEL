@@ -61,7 +61,7 @@ def _write_cache(cache: dict) -> None:
 
 def fetch_recent_malware(*, force_refresh: bool = False) -> dict:
     """Fetch or reuse MalwareBazaar's latest 100 additions (one-hour cache)."""
-    api_key = os.environ.get("SENTINEL_MALWAREBAZAAR_API_KEY", "").strip()
+    from .integration_settings import provider_key\n\n    api_key = provider_key("malwarebazaar")
     if not api_key:
         return {
             "provider": "MalwareBazaar", "status": "not_configured", "enabled": False,
