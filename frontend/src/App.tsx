@@ -561,7 +561,7 @@ function HostView({ scan, scans, busy, onStart, onDeleteScan, onClearHistory }: 
           <details className="inventory-details"><summary>Inspected process details · {inspectedProcesses.length} records</summary>
             <div className="simple-table inventory-list">{inspectedProcesses.slice(0, 100).map((item, index) => <div className="simple-row" key={String(item.pid ?? index)} style={{gridTemplateColumns:"1fr auto"}}>
               <strong>{String(item.name ?? "Unknown")} · PID {String(item.pid ?? "—")}</strong>
-              <small>PPID {String(item.ppid ?? "—")} · {String(item.user ?? "unknown user")} · RSS {bytes(Number(item.memory_rss_bytes ?? 0))}</small>
+              <small>Parent {String(item.parent_name ?? "not visible")} (PID {String(item.ppid ?? "—")}) · {String(item.user ?? "unknown user")} · RSS {bytes(Number(item.memory_rss_bytes ?? 0))}</small>
               <span>{String(item.executable ?? "Executable path unavailable")}</span>
             </div>)}</div>
           </details>
