@@ -434,3 +434,38 @@ def test_host_assessment_includes_process_memory_indicators(tmp_path, monkeypatc
     assert finding["assessment"] == "suspicious_unconfirmed"
     assert result["summary"]["process_memory_indicators"] == 1
     assert "Process memory contents were not read." in result["limitations"]
+
+
+def test_automatic_verification_marks_verified_package_clamav_match_as_likely_false_positive(monkeypatch):
+    monkeypatch.setattr(host_assessment, "investigate_file", lambda path, digest: {
+        "package": {"owned": True, "package": "unicornscan", "integrity": "verified"},
+        "assessment": {"verdict": "likely_false_positive", "confidence": "high"},
+    })
+    findings = [{
+        "id": "clamav-test", "category": "malware", "source": "clamav",
+        "path": "/etc/unicornscan/payloads.conf", "sha256": "a" * 64,
+    }]
+
+    counts = host_assessment._automatic_verify_malware_findings(findings)
+
+    assert counts["likely_false_positive"] == 1
+    assert findings[0]["automatic_verification"]["verdict"] == "likely_false_positive"
+    assert findings[0]["automatic_verification"]["confidence"] == "high"
+    assert findings[0]["automatic_verification"]["checks"][1]["status"] == "passed"
+
+
+def test_automatic_verification_never_downgrades_exact_malware_hash_indicator(monkeypatch):
+    monkeypatch.setattr(host_assessment, "investigate_file", lambda path, digest: {
+        "package": {"owned": True, "package": "fixture", "integrity": "verified"},
+        "assessment": {"verdict": "likely_false_positive", "confidence": "high"},
+    })
+    findings = [{
+        "id": "ioc-test", "category": "malware", "source": "malwarebazaar",
+        "path": "/tmp/fixture.bin", "sha256": "b" * 64,
+    }]
+
+    counts = host_assessment._automatic_verify_malware_findings(findings)
+
+    assert counts["strong_malware_indicator"] == 1
+    assert findings[0]["automatic_verification"]["verdict"] == "strong_malware_indicator"
+    assert "not proof" in findings[0]["automatic_verification"]["limitations"][2]
