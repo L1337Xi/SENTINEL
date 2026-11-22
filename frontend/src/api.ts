@@ -29,8 +29,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 export const api = {
   integrationKeys: () => request<IntegrationKeysStatus>("/api/integrations/keys"),
-  saveIntegrationKeys: (keys: { malwarebazaar?: string; virustotal?: string; malwarebytes?: string }) =>
+  saveIntegrationKeys: (keys: { malwarebazaar?: string; virustotal?: string; malwarebytes_client_id?: string; malwarebytes_client_secret?: string; malwarebytes_account_id?: string }) =>
     request<IntegrationKeysStatus>("/api/integrations/keys", { method: "PUT", body: JSON.stringify(keys) }),
+  verifyIntegration: (provider: "malwarebazaar" | "virustotal" | "malwarebytes") =>
+    request<IntegrationKeysStatus>("/api/integrations/" + provider + "/verify", { method: "POST" }),
 
   alerts: () => request<{ items: AlertRecord[]; total: number }>("/api/alerts?limit=50"),
   updateAlert: (id: string, status: "acknowledged" | "resolved") =>
@@ -61,7 +63,12 @@ export const api = {
     request<Record<string, unknown>>(`/api/quarantine/${encodeURIComponent(id)}/restore`, { method: "POST" }),
 };
 
-export interface IntegrationProviderState { configured: boolean; storage: "environment" | "local_file" | "none"; }
+export interface IntegrationProviderState {
+  configured: boolean;
+  configuration: "configured" | "incomplete_credentials" | "missing";
+  storage: "environment" | "local_file" | "none";
+  verification: { status: string; message: string; checked_at?: string; http_status?: number };
+}
 export interface IntegrationKeysStatus {
   providers: { malwarebazaar: IntegrationProviderState; virustotal: IntegrationProviderState; malwarebytes: IntegrationProviderState };
   storage_note: string;
