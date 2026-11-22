@@ -71,7 +71,7 @@ def inspect_processes(
     connections_by_pid: dict[int, list[str]] = defaultdict(list)
     try:
         connections = psutil.net_connections(kind="inet")
-    except (psutil.AccessDenied, OSError):
+    except (psutil.Error, OSError):
         connections = []
     for connection in connections:
         if connection.pid is None:
@@ -202,6 +202,9 @@ def inspect_processes(
         })
 
     process_rows.sort(key=lambda item: (item["name"].lower(), item["pid"]))
+    parent_names = {item["pid"]: item["name"] for item in process_rows}
+    for item in process_rows:
+        item["parent_name"] = parent_names.get(item["ppid"], "not visible to SENTINEL")
     counts = Counter(item["id"].split("-")[-2] for item in indicators)
     return {
         "engine": "SENTINEL Linux process and executable-memory inspection",
