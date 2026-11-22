@@ -778,9 +778,9 @@ function IntegrationSettingsView() {
   const [error, setError] = useState("");
   const [busyProvider, setBusyProvider] = useState("");
   const providers = [
-    { id: "malwarebazaar" as const, name: "MalwareBazaar", description: "Recent malware hash feed. This provider is already integrated with Host Assessment." },
-    { id: "virustotal" as const, name: "VirusTotal", description: "Credential can be saved now. Hash lookup integration is not implemented yet; commercial use requires an appropriate VirusTotal licence." },
-    { id: "malwarebytes" as const, name: "Malwarebytes", description: "Credential can be saved now. A supported Malwarebytes API/scanning integration is not implemented yet." },
+    { id: "malwarebazaar" as const, name: "MalwareBazaar", description: "Recent malware hash feed. This provider is already integrated with Host Assessment.", helpLabel: "Get free Auth-Key", helpUrl: "https://auth.abuse.ch/" },
+    { id: "virustotal" as const, name: "VirusTotal", description: "Hash lookup integration is not implemented yet. VirusTotal's public API is prohibited in commercial products; a separate commercial licence is required for commercial use.", helpLabel: "Get API key", helpUrl: "https://www.virustotal.com/gui/my-apikey" },
+    { id: "malwarebytes" as const, name: "Malwarebytes", description: "Nebula business API access uses a client ID, client secret and account ID—not a single API key. SENTINEL's Malwarebytes integration is not implemented yet.", helpLabel: "API access & documentation", helpUrl: "https://api.malwarebytes.com/nebula/v1/docs" },
   ];
   const load = useCallback(async () => {
     try { setStatus(await api.integrationKeys()); setError(""); }
@@ -806,7 +806,7 @@ function IntegrationSettingsView() {
       {providers.map((provider) => {
         const state = status?.providers[provider.id];
         return <div className="integration-key-row" key={provider.id}>
-          <div className="integration-key-copy"><div><h3>{provider.name}</h3><span className={state?.configured ? "integration-state configured" : "integration-state"}>{state?.configured ? "KEY CONFIGURED" : "NOT CONFIGURED"}</span></div><p>{provider.description}</p></div>
+          <div className="integration-key-copy"><div><h3>{provider.name}</h3><span className={state?.configured ? "integration-state configured" : "integration-state"}>{state?.configured ? "KEY CONFIGURED" : "NOT CONFIGURED"}</span></div><p>{provider.description}</p><a className="integration-provider-link" href={provider.helpUrl} target="_blank" rel="noopener noreferrer">{provider.helpLabel} <span aria-hidden="true">↗</span></a></div>
           <div className="integration-key-controls">
             <label><span>{state?.configured ? "REPLACE API KEY" : "API KEY"}</span><input type="password" autoComplete="new-password" spellCheck={false} value={keys[provider.id]} onChange={(event) => setKeys((current) => ({ ...current, [provider.id]: event.target.value }))} placeholder={state?.configured ? "Saved key is hidden" : "Paste provider API key"} /></label>
             <div><button className="button button-secondary" disabled={busyProvider === provider.id || !keys[provider.id].trim()} onClick={() => void save(provider.id)}>{busyProvider === provider.id ? "Saving…" : "Save key"}</button><button className="text-action" disabled={busyProvider === provider.id || !state?.configured} onClick={() => void save(provider.id, true)}>Clear key</button></div>
