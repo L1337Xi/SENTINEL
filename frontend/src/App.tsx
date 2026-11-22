@@ -10,7 +10,8 @@ const navItems: { id: View; label: string; code: string }[] = [
   { id: "events", label: "Event stream", code: "02" },
   { id: "alerts", label: "Detection alerts", code: "03" },
   { id: "host", label: "Host assessment", code: "04" },
-  { id: "network", label: "Network discovery", code: "05" },\n  { id: "settings", label: "Integrations & keys", code: "06" },
+  { id: "network", label: "Network discovery", code: "05" },
+  { id: "settings", label: "Integrations & keys", code: "06" },
 ];
 
 function formatDate(value?: string | null): string {
@@ -225,7 +226,8 @@ export default function App() {
         {view === "events" && <EventsView events={events} total={total} search={search} severity={severity} setSearch={setSearch} setSeverity={setSeverity} onRefresh={() => void refresh()} />}
         {view === "alerts" && <AlertsView alerts={alerts} onChangeStatus={changeAlertStatus} onRefresh={() => void refresh()} />}
         {view === "host" && <HostView scan={activeScan?.scan_type === "system" ? activeScan : scans.find((scan) => scan.scan_type === "system") ?? null} scans={scans} busy={busy} onStart={() => void startScan("system")} onDeleteScan={(id) => void deleteHostScan(id)} onClearHistory={() => void clearHostScanHistory()} />}
-        {view === "network" && <NetworkView networks={networks} selected={selectedNetwork} setSelected={setSelectedNetwork} scan={activeScan?.scan_type === "network" ? activeScan : scans.find((scan) => scan.scan_type === "network") ?? null} scans={scans} busy={busy} onStart={() => void startScan("network")} onReload={() => void loadNetworks()} />}\n        {view === "settings" && <IntegrationSettingsView />}
+        {view === "network" && <NetworkView networks={networks} selected={selectedNetwork} setSelected={setSelectedNetwork} scan={activeScan?.scan_type === "network" ? activeScan : scans.find((scan) => scan.scan_type === "network") ?? null} scans={scans} busy={busy} onStart={() => void startScan("network")} onReload={() => void loadNetworks()} />}
+        {view === "settings" && <IntegrationSettingsView />}
       </main>
     </div>
   );
@@ -239,7 +241,8 @@ function Landing({ health, onEnter, onOpen }: { health: "checking" | "online" | 
     events: "Search and filter locally collected security events.",
     alerts: "Triage detections and track their resolution state.",
     host: "Inspect system inventory, findings and file evidence.",
-    network: "Discover responsive devices on an authorised private subnet.",\n    settings: "Configure local credentials for optional threat-intelligence providers.",
+    network: "Discover responsive devices on an authorised private subnet.",
+    settings: "Configure local credentials for optional threat-intelligence providers.",
   };
   return (
     <div className="landing">
