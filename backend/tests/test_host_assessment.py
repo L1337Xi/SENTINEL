@@ -468,4 +468,4 @@ def test_automatic_verification_never_downgrades_exact_malware_hash_indicator(mo
 
     assert counts["strong_malware_indicator"] == 1
     assert findings[0]["automatic_verification"]["verdict"] == "strong_malware_indicator"
-    assert "not proof" in findings[0]["automatic_verification"]["limitations"][2]
+    assert "not treated as proof" in findings[0]["automatic_verification"]["limitations"][2]
