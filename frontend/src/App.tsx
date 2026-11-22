@@ -805,10 +805,14 @@ function IntegrationSettingsView() {
     try {
       const update: Partial<typeof keys> = {};
       if (provider === "malwarebazaar" || provider === "virustotal") update[provider] = clear ? "" : keys[provider];
-      else {
-        update.malwarebytes_client_id = clear ? "" : keys.malwarebytes_client_id;
-        update.malwarebytes_client_secret = clear ? "" : keys.malwarebytes_client_secret;
-        update.malwarebytes_account_id = clear ? "" : keys.malwarebytes_account_id;
+      else if (clear) {
+        update.malwarebytes_client_id = "";
+        update.malwarebytes_client_secret = "";
+        update.malwarebytes_account_id = "";
+      } else {
+        if (keys.malwarebytes_client_id.trim()) update.malwarebytes_client_id = keys.malwarebytes_client_id;
+        if (keys.malwarebytes_client_secret.trim()) update.malwarebytes_client_secret = keys.malwarebytes_client_secret;
+        if (keys.malwarebytes_account_id.trim()) update.malwarebytes_account_id = keys.malwarebytes_account_id;
       }
       const result = await api.saveIntegrationKeys(update);
       setStatus(result);
@@ -858,9 +862,9 @@ function IntegrationSettingsView() {
               <label><span>ACCOUNT ID</span><input type="password" autoComplete="new-password" spellCheck={false} value={keys.malwarebytes_account_id} onChange={(event) => setKeys((current) => ({ ...current, malwarebytes_account_id: event.target.value }))} placeholder={state?.configured ? "Saved Account ID is hidden" : "Nebula Account ID"} /></label>
             </> : <label><span>{state?.configured ? "REPLACE API KEY" : "API KEY"}</span><input type="password" autoComplete="new-password" spellCheck={false} value={keys[provider.id]} onChange={(event) => setKeys((current) => ({ ...current, [provider.id]: event.target.value }))} placeholder={state?.configured ? "Saved key is hidden" : "Paste provider API key"} /></label>}
             <div>
-              <button className="button button-secondary" disabled={busy || (provider.id === "malwarebytes" ? !keys.malwarebytes_client_id.trim() || !keys.malwarebytes_client_secret.trim() || !keys.malwarebytes_account_id.trim() : !keys[provider.id].trim())} onClick={() => void save(provider.id)}>{busy ? "Working…" : "Save credentials"}</button>
+              <button className="button button-secondary" disabled={busy || (provider.id === "malwarebytes" ? !keys.malwarebytes_client_id.trim() && !keys.malwarebytes_client_secret.trim() && !keys.malwarebytes_account_id.trim() : !keys[provider.id].trim())} onClick={() => void save(provider.id)}>{busy ? "Working…" : "Save credentials"}</button>
               <button className="button button-secondary" disabled={busy || !state?.configured} onClick={() => void verify(provider.id)}>Verify connection</button>
-              <button className="text-action" disabled={busy || !state?.configured} onClick={() => void save(provider.id, true)}>Clear</button>
+              <button className="text-action" disabled={busy || (!state?.configured && state?.configuration !== "incomplete_credentials")} onClick={() => void save(provider.id, true)}>Clear</button>
             </div>
           </div>
         </div>;
