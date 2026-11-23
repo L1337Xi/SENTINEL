@@ -11,6 +11,11 @@ export interface AlertRecord {
 }
 export interface EditionFeature { id: string; name: string; tier: "normal" | "advanced"; status: "available" | "planned"; description: string; included: boolean; }
 export interface EditionManifest { edition: "normal" | "advanced"; display_name: string; features: EditionFeature[]; license_enforcement: string; notice: string; }
+export interface RouterProbeResult {
+  reachable: boolean; status: string; http_status?: number; final_url: string; title: string;
+  vendor_hint?: string; login_form_detected: boolean; form_count?: number; password_fields?: number;
+  capabilities: string[]; message: string; security_note?: string;
+}
 export interface ScanRecord {
   id: string; scan_type: "system" | "network"; status: "queued" | "running" | "completed" | "failed";
   target: string; started_at: string; completed_at: string | null; result: Record<string, unknown> | null; error: string | null;
@@ -52,6 +57,7 @@ export const api = {
   deleteScan: (id: string) => request<{ id: string; deleted: boolean }>(`/api/scans/${encodeURIComponent(id)}`, { method: "DELETE" }),
   clearHostScanHistory: () => request<{ deleted: number; message: string }>("/api/scans/system", { method: "DELETE" }),
   networks: () => request<{ items: NetworkInterface[] }>("/api/scanner/networks"),
+  probeRouter: (address: string) => request<RouterProbeResult>("/api/network/router/probe", { method: "POST", body: JSON.stringify({ address }) }),
   startSystemScan: () => request<{ id: string; status: string }>("/api/scans/system", { method: "POST" }),
   startNetworkScan: (network: string) => request<{ id: string; status: string }>("/api/scans/network", { method: "POST", body: JSON.stringify({ network }) }),
   investigateFinding: (scanId: string, findingId: string) =>
