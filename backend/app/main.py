@@ -53,6 +53,7 @@ from .file_response import (
 )
 from .host_assessment import run_host_assessment
 from .integration_settings import provider_status, save_provider_keys, verify_provider
+from .router_integration import inspect_router_login
 from .scanner import network_discovery, system_inventory, validate_local_network
 from .schemas import (
     AlertUpdate,
@@ -127,6 +128,21 @@ def verify_integration_provider(provider: str) -> dict:
         return verify_provider(provider)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+class RouterProbeRequest(BaseModel):
+    address: str = Field(min_length=8, max_length=256)
+
+
+@app.post("/api/network/router/probe", tags=["network monitoring"])
+def probe_router(payload: RouterProbeRequest) -> dict:
+    """Inspect a private router login page without submitting or storing credentials."""
+    try:
+        return inspect_router_login(payload.address)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (OSError, TimeoutError) as exc:
+        raise HTTPException(status_code=502, detail=f"Router page could not be reached: {str(exc)[:200]}") from exc
 
 
 @app.get("/api/health", tags=["system"])
