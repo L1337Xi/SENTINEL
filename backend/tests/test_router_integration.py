@@ -20,7 +20,9 @@ def test_router_url_requires_private_ipv4():
 def test_router_login_probe_detects_page_without_submitting_credentials(monkeypatch):
     class Response:
         status = 200
-        headers = {"Content-Type": "text/html"}
+        def __init__(self):
+            self.headers = {"Content-Type": "text/html"}
+
         def __enter__(self):
             return self
         def __exit__(self, *args):
@@ -56,8 +58,8 @@ def test_router_probe_does_not_follow_redirects(monkeypatch):
 
 
 def test_router_probe_api_returns_discovery_result(monkeypatch):
-    from fastapi.testclient import TestClient
     from app import main
+    from fastapi.testclient import TestClient
 
     monkeypatch.setattr(main, "inspect_router_login", lambda address: {
         "reachable": True, "status": "login_page_detected", "http_status": 200,
@@ -71,8 +73,8 @@ def test_router_probe_api_returns_discovery_result(monkeypatch):
 
 
 def test_router_probe_api_rejects_invalid_address():
-    from fastapi.testclient import TestClient
     from app.main import app
+    from fastapi.testclient import TestClient
 
     with TestClient(app) as client:
         response = client.post("/api/network/router/probe", json={"address": "https://example.com"})
