@@ -34,7 +34,7 @@ def test_router_login_probe_detects_page_without_submitting_credentials(monkeypa
             assert timeout == 4
             return Response()
 
-    monkeypatch.setattr(router_integration, "build_opener", lambda handler: Opener())
+    monkeypatch.setattr(router_integration, "build_opener", lambda *handlers: Opener())
     result = router_integration.inspect_router_login("192.168.1.1/admin/login.asp")
     assert result["reachable"] is True
     assert result["login_form_detected"] is True
