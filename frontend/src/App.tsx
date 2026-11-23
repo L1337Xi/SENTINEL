@@ -804,7 +804,7 @@ function RouterConnectionPanel() {
     </div>
     {error && <div className="scan-error">{error}</div>}
     {result && <div className="router-probe-result">
-      <div className="scan-state-row"><span className={"scan-state " + (result.reachable ? "completed" : "failed")}>{result.status.replaceAll("_", " ")}</span><span className="section-note">HTTP {result.http_status ?? "—"}</span></div>
+      <div className="scan-state-row"><span className={"scan-state " + (result.reachable ? "completed" : "failed")}>{result.status.replace(/_/g, " ")}</span><span className="section-note">HTTP {result.http_status ?? "—"}</span></div>
       <div className="router-result-grid">
         <Resource label="PAGE TITLE" value={result.title || "Untitled page"} detail={result.final_url} />
         <Resource label="VENDOR HINT" value={result.vendor_hint ?? "Unknown"} detail="Detected from visible page content" />
