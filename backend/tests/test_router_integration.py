@@ -52,3 +52,28 @@ def test_router_probe_does_not_follow_redirects(monkeypatch):
     result = router_integration.inspect_router_login("http://192.168.1.1/")
     assert result["status"] == "redirect_not_followed"
     assert result["capabilities"] == []
+
+
+
+def test_router_probe_api_returns_discovery_result(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import main
+
+    monkeypatch.setattr(main, "inspect_router_login", lambda address: {
+        "reachable": True, "status": "login_page_detected", "http_status": 200,
+        "final_url": address, "title": "Router Login", "login_form_detected": True,
+        "capabilities": [], "message": "Login page detected.",
+    })
+    with TestClient(main.app) as client:
+        response = client.post("/api/network/router/probe", json={"address": "192.168.1.1"})
+    assert response.status_code == 200
+    assert response.json()["login_form_detected"] is True
+
+
+def test_router_probe_api_rejects_invalid_address():
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    with TestClient(app) as client:
+        response = client.post("/api/network/router/probe", json={"address": "https://example.com"})
+    assert response.status_code == 422
