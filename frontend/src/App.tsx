@@ -826,6 +826,15 @@ function RouterConnectionPanel() {
     catch { /* The local session is discarded from the UI even if the router is unreachable. */ }
     setConnection(null); setSnapshot(null); setPassword(""); setBusy(false);
   }
+  useEffect(() => {
+    if (!connection) return;
+    const timer = window.setInterval(() => {
+      void api.routerSnapshot(connection.session_id)
+        .then(setSnapshot)
+        .catch((err) => setError(err instanceof Error ? err.message : "Router session refresh failed."));
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [connection]);
   const renderTables = (heading: string, tables: NonNullable<typeof snapshot>["devices"], empty: string) => (
     <div className="router-data-section">
       <div className="result-heading"><h3>{heading}</h3><span>{tables.reduce((count, table) => count + table.rows.length, 0)} ROWS</span></div>
