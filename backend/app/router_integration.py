@@ -181,7 +181,7 @@ def inspect_router_login(address: str) -> dict:
     """Inspect a private router login page without submitting credentials."""
     url = _validate_router_url(address)
     opener = build_opener(ProxyHandler({}), _NoRedirect())
-    page, status, redirect = _open_page(opener, url)
+    page, status, _ = _open_page(opener, url)
     if status in {301, 302, 303, 307, 308}:
         return {
             "reachable": True, "status": "redirect_not_followed", "http_status": status,
@@ -216,7 +216,7 @@ def login_router(address: str, username: str, password: str) -> dict:
     if not username.strip() or not password:
         raise ValueError("Enter both router username and password.")
     opener = build_opener(ProxyHandler({}), HTTPCookieProcessor(CookieJar()), _NoRedirect())
-    page, initial_status, redirect = _open_page(opener, url)
+    page, initial_status, _ = _open_page(opener, url)
     if initial_status in {301, 302, 303, 307, 308}:
         raise ValueError("Router redirected the login page. Enter its final local address directly.")
     body, _, final_url = page
