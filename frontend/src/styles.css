@@ -499,3 +499,5 @@ body {
 @media (max-width: 720px) {
   .integration-key-row { grid-template-columns: 1fr; gap: 15px; }
 }
+
+.router-address{width:100%;min-width:260px;padding:10px;border:1px solid #3a463e;border-radius:2px;background:#121915;color:#e6ece8;font-size:10px}.router-address:focus{outline:1px solid #668b70;border-color:#668b70}.router-probe-result{margin-top:15px;padding:13px;border:1px solid #344138;background:#1b241e}.router-result-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:13px}.router-message{margin:10px 0 0;color:#aab6ac;font-size:10px;line-height:1.6;overflow-wrap:anywhere}@media(max-width:900px){.router-result-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:560px){.router-result-grid{grid-template-columns:1fr}}
