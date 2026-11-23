@@ -844,7 +844,7 @@ function RouterConnectionPanel() {
     <div className="router-connect-grid">
       <label><span>ROUTER ADMINISTRATION URL</span><input className="router-address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="http://192.168.1.1/admin/login.asp" autoComplete="url" /></label>
       <ActionButton secondary onClick={() => void inspect()} disabled={busy || !address.trim()}>{busy ? "Working…" : "Inspect login page"}</ActionButton>
-      <label><span>ADMIN USERNAME</span><input className="router-address" value={username} onChange={(event) => setUsername(event.target.value)} onChangeCapture={undefined} autoComplete="username" placeholder="Router admin username" /></label>
+      <label><span>ADMIN USERNAME</span><input className="router-address" value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" placeholder="Router admin username" /></label>
       <label><span>ADMIN PASSWORD</span><input className="router-address" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" placeholder="Entered only for this connection" /></label>
       <ActionButton onClick={() => void connect()} disabled={busy || !address.trim() || !username.trim() || !password}>{busy ? "Connecting…" : "Connect read-only →"}</ActionButton>
     </div>
