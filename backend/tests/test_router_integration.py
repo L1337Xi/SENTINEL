@@ -48,7 +48,7 @@ def test_router_probe_does_not_follow_redirects(monkeypatch):
         def open(self, request, timeout):
             raise HTTPError(request.full_url, 302, "Redirect", {}, BytesIO())
 
-    monkeypatch.setattr(router_integration, "build_opener", lambda handler: Opener())
+    monkeypatch.setattr(router_integration, "build_opener", lambda *handlers: Opener())
     result = router_integration.inspect_router_login("http://192.168.1.1/")
     assert result["status"] == "redirect_not_followed"
     assert result["capabilities"] == []
