@@ -1,6 +1,7 @@
-import pytest
 from io import BytesIO
 from urllib.error import HTTPError
+
+import pytest
 
 from app import router_integration
 
