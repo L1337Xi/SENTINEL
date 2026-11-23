@@ -206,7 +206,7 @@ def inspect_router_login(address: str) -> dict:
         "capabilities": [],
         "message": "Login form detected. Authentication is available for standard same-origin HTML POST forms."
         if passwords else "Router page reached. No password field was detected.",
-        "security_note": "Credentials are not submitted during discovery.",
+        "security_note": "Credentials were not submitted or stored during discovery.",
     }
 
 
