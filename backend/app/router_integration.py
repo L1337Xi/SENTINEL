@@ -15,7 +15,7 @@ from html.parser import HTMLParser
 from http.cookiejar import CookieJar
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin, urlsplit
-from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, HTTPCookieProcessor, ProxyHandler, Request, build_opener
 
 MAX_PAGE_BYTES = 512 * 1024
 SESSION_TTL_SECONDS = 1800
@@ -215,8 +215,8 @@ def login_router(address: str, username: str, password: str) -> dict:
     url = _validate_router_url(address)
     if not username.strip() or not password:
         raise ValueError("Enter both router username and password.")
-    opener = build_opener(ProxyHandler({}), CookieJar(), _NoRedirect())
-    page, status, redirect = _open_page(opener, url)
+    opener = build_opener(ProxyHandler({}), HTTPCookieProcessor(CookieJar()), _NoRedirect())
+    page, _, redirect = _open_page(opener, url)
     if redirect:
         raise ValueError("Router redirected the login page. Enter its final local address directly.")
     body, _, final_url = page
@@ -247,7 +247,7 @@ def login_router(address: str, username: str, password: str) -> dict:
             values[field["name"]] = field["value"]
     values[user_field["name"]] = username.strip()
     values[password_field["name"]] = password
-    response, response_status, redirect = _open_page(opener, action, urlencode(values).encode())
+    response, _, redirect = _open_page(opener, action, urlencode(values).encode())
     if redirect:
         destination = urljoin(action, redirect)
         if not _same_origin(final_url, destination):
@@ -275,6 +275,7 @@ def login_router(address: str, username: str, password: str) -> dict:
         "vendor_hint": _vendor_hint(result_body), "title": result_title,
         "expires_in_seconds": SESSION_TTL_SECONDS,
         "message": "Router session established in memory. Credentials were not saved.",
+        "transport_warning": "Credentials and session traffic use unencrypted HTTP." if urlsplit(final_url).scheme == "http" else None,
         "capabilities": [],
     }
 
