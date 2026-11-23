@@ -16,6 +16,19 @@ export interface RouterProbeResult {
   vendor_hint?: string; login_form_detected: boolean; form_count?: number; password_fields?: number;
   capabilities: string[]; message: string; security_note?: string;
 }
+export interface RouterLoginResult {
+  session_id: string; authenticated: boolean; vendor_hint: string; title: string;
+  expires_in_seconds: number; message: string; transport_warning?: string | null; capabilities: string[];
+}
+export interface RouterDataTable {
+  page_title: string; url: string; headers: string[]; rows: Record<string, string>[];
+}
+export interface RouterSnapshot {
+  authenticated: boolean; vendor_hint: string; collected_at: string; pages_inspected: { title: string; url: string; http_status: number }[];
+  tables: RouterDataTable[]; devices: RouterDataTable[]; traffic: RouterDataTable[]; domains: RouterDataTable[];
+  capabilities: { device_inventory: boolean; per_device_traffic: boolean; domain_activity: boolean; router_blocking: boolean };
+  limitations: string[];
+}
 export interface ScanRecord {
   id: string; scan_type: "system" | "network"; status: "queued" | "running" | "completed" | "failed";
   target: string; started_at: string; completed_at: string | null; result: Record<string, unknown> | null; error: string | null;
@@ -58,6 +71,9 @@ export const api = {
   clearHostScanHistory: () => request<{ deleted: number; message: string }>("/api/scans/system", { method: "DELETE" }),
   networks: () => request<{ items: NetworkInterface[] }>("/api/scanner/networks"),
   probeRouter: (address: string) => request<RouterProbeResult>("/api/network/router/probe", { method: "POST", body: JSON.stringify({ address }) }),
+  loginRouter: (address: string, username: string, password: string) => request<RouterLoginResult>("/api/network/router/login", { method: "POST", body: JSON.stringify({ address, username, password }) }),
+  routerSnapshot: (sessionId: string) => request<RouterSnapshot>("/api/network/router/" + encodeURIComponent(sessionId) + "/snapshot"),
+  disconnectRouter: (sessionId: string) => request<{ disconnected: boolean }>("/api/network/router/" + encodeURIComponent(sessionId), { method: "DELETE" }),
   startSystemScan: () => request<{ id: string; status: string }>("/api/scans/system", { method: "POST" }),
   startNetworkScan: (network: string) => request<{ id: string; status: string }>("/api/scans/network", { method: "POST", body: JSON.stringify({ network }) }),
   investigateFinding: (scanId: string, findingId: string) =>
