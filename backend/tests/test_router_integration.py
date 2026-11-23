@@ -34,7 +34,7 @@ def test_router_login_probe_detects_page_without_submitting_credentials(monkeypa
     class Opener:
         def open(self, request, timeout):
             assert request.full_url == "http://192.168.1.1/admin/login.asp"
-            assert timeout == 4
+            assert timeout == 5
             return Response()
 
     monkeypatch.setattr(router_integration, "build_opener", lambda *handlers: Opener())
