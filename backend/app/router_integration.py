@@ -20,6 +20,7 @@ from urllib.request import HTTPRedirectHandler, HTTPCookieProcessor, ProxyHandle
 MAX_PAGE_BYTES = 512 * 1024
 SESSION_TTL_SECONDS = 1800
 MAX_DISCOVERY_PAGES = 8
+MAX_ROUTER_SESSIONS = 8
 _SESSIONS: dict[str, dict] = {}
 _SESSION_LOCK = threading.RLock()
 
@@ -266,10 +267,19 @@ def login_router(address: str, username: str, password: str) -> dict:
     if still_login:
         raise ValueError("Router did not accept the credentials, or requires an unsupported login challenge.")
     session_id = secrets.token_urlsafe(32)
+    now = time.monotonic()
     with _SESSION_LOCK:
+        expired = [
+            key for key, value in _SESSIONS.items()
+            if now - value["last_seen"] > SESSION_TTL_SECONDS
+        ]
+        for key in expired:
+            _SESSIONS.pop(key, None)
+        if len(_SESSIONS) >= MAX_ROUTER_SESSIONS:
+            raise ValueError("SENTINEL already has the maximum number of active router sessions.")
         _SESSIONS[session_id] = {
-            "opener": opener, "base_url": final_url, "created": time.monotonic(),
-            "last_seen": time.monotonic(), "vendor_hint": _vendor_hint(result_body),
+            "opener": opener, "base_url": final_url, "created": now,
+            "last_seen": now, "vendor_hint": _vendor_hint(result_body),
             "title": result_title, "last_url": result_url,
         }
     return {
