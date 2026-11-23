@@ -10,7 +10,7 @@ import re
 from html.parser import HTMLParser
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 
 class _LoginPageParser(HTMLParser):
@@ -79,7 +79,11 @@ def _validate_router_url(address: str) -> str:
         raise ValueError("Router address must be a private, non-loopback IPv4 address.")
     if ip.is_reserved:
         raise ValueError("Reserved IP addresses cannot be used as router targets.")
-    if parsed.port and not 1 <= parsed.port <= 65535:
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Router port is invalid.") from exc
+    if port is not None and not 1 <= port <= 65535:
         raise ValueError("Router port is invalid.")
     path = parsed.path or "/"
     return parsed._replace(path=path).geturl()
@@ -89,7 +93,7 @@ def inspect_router_login(address: str) -> dict[str, object]:
     """Fetch a bounded login page and report only non-sensitive form metadata."""
     url = _validate_router_url(address)
     request = Request(url, headers={"User-Agent": "SENTINEL-Router-Discovery/0.1", "Accept": "text/html"})
-    opener = build_opener(_NoRedirect())
+    opener = build_opener(ProxyHandler({}), _NoRedirect())
     try:
         with opener.open(request, timeout=4) as response:
             status = response.status
