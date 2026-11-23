@@ -252,7 +252,7 @@ def login_router(address: str, username: str, password: str) -> dict:
         destination = urljoin(action, redirect)
         if not _same_origin(final_url, destination):
             raise ValueError("Router login redirected outside its own origin; session rejected.")
-        response, response_status, second_redirect = _open_page(opener, destination)
+        response, _, second_redirect = _open_page(opener, destination)
         if second_redirect:
             raise ValueError("Router login returned multiple redirects; session rejected.")
     result_body, _, result_url = response
