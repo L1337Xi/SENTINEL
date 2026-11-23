@@ -182,7 +182,7 @@ def inspect_router_login(address: str) -> dict:
     url = _validate_router_url(address)
     opener = build_opener(ProxyHandler({}), _NoRedirect())
     page, status, redirect = _open_page(opener, url)
-    if redirect:
+    if status in {301, 302, 303, 307, 308}:
         return {
             "reachable": True, "status": "redirect_not_followed", "http_status": status,
             "final_url": url, "title": "", "login_form_detected": False,
@@ -216,8 +216,8 @@ def login_router(address: str, username: str, password: str) -> dict:
     if not username.strip() or not password:
         raise ValueError("Enter both router username and password.")
     opener = build_opener(ProxyHandler({}), HTTPCookieProcessor(CookieJar()), _NoRedirect())
-    page, _, redirect = _open_page(opener, url)
-    if redirect:
+    page, initial_status, redirect = _open_page(opener, url)
+    if initial_status in {301, 302, 303, 307, 308}:
         raise ValueError("Router redirected the login page. Enter its final local address directly.")
     body, _, final_url = page
     parser, _ = _parse_page(body)
@@ -247,13 +247,15 @@ def login_router(address: str, username: str, password: str) -> dict:
             values[field["name"]] = field["value"]
     values[user_field["name"]] = username.strip()
     values[password_field["name"]] = password
-    response, _, redirect = _open_page(opener, action, urlencode(values).encode())
-    if redirect:
+    response, response_status, redirect = _open_page(opener, action, urlencode(values).encode())
+    if response_status in {301, 302, 303, 307, 308}:
+        if not redirect:
+            raise ValueError("Router returned a redirect without a destination; session rejected.")
         destination = urljoin(action, redirect)
         if not _same_origin(final_url, destination):
             raise ValueError("Router login redirected outside its own origin; session rejected.")
-        response, _, second_redirect = _open_page(opener, destination)
-        if second_redirect:
+        response, second_status, second_redirect = _open_page(opener, destination)
+        if second_status in {301, 302, 303, 307, 308} or second_redirect:
             raise ValueError("Router login returned multiple redirects; session rejected.")
     result_body, _, result_url = response
     result_parser, result_title = _parse_page(result_body)
