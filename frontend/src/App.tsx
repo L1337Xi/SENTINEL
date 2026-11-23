@@ -787,34 +787,98 @@ function NetworkView({ networks, selected, setSelected, scan, scans, busy, onSta
 
 function RouterConnectionPanel() {
   const [address, setAddress] = useState("http://192.168.1.1/");
-  const [result, setResult] = useState<Awaited<ReturnType<typeof api.probeRouter>> | null>(null);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [probe, setProbe] = useState<Awaited<ReturnType<typeof api.probeRouter>> | null>(null);
+  const [connection, setConnection] = useState<Awaited<ReturnType<typeof api.loginRouter>> | null>(null);
+  const [snapshot, setSnapshot] = useState<Awaited<ReturnType<typeof api.routerSnapshot>> | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   async function inspect() {
-    setBusy(true); setError(""); setResult(null);
-    try { setResult(await api.probeRouter(address)); }
+    setBusy(true); setError(""); setProbe(null);
+    try { setProbe(await api.probeRouter(address)); }
     catch (err) { setError(err instanceof Error ? err.message : "Router discovery failed."); }
     finally { setBusy(false); }
   }
+  async function connect() {
+    setBusy(true); setError(""); setSnapshot(null);
+    try {
+      const connected = await api.loginRouter(address, username, password);
+      setConnection(connected);
+      setPassword("");
+      setSnapshot(await api.routerSnapshot(connected.session_id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Router connection failed.");
+      setConnection(null);
+    } finally { setBusy(false); }
+  }
+  async function reloadSnapshot() {
+    if (!connection) return;
+    setBusy(true); setError("");
+    try { setSnapshot(await api.routerSnapshot(connection.session_id)); }
+    catch (err) { setError(err instanceof Error ? err.message : "Could not read router data."); }
+    finally { setBusy(false); }
+  }
+  async function disconnect() {
+    if (!connection) return;
+    setBusy(true);
+    try { await api.disconnectRouter(connection.session_id); }
+    catch { /* The local session is discarded from the UI even if the router is unreachable. */ }
+    setConnection(null); setSnapshot(null); setPassword(""); setBusy(false);
+  }
+  const renderTables = (heading: string, tables: NonNullable<typeof snapshot>["devices"], empty: string) => (
+    <div className="router-data-section">
+      <div className="result-heading"><h3>{heading}</h3><span>{tables.reduce((count, table) => count + table.rows.length, 0)} ROWS</span></div>
+      {tables.length === 0 ? <div className="empty-state">{empty}</div> : tables.map((table, index) => (
+        <div className="table-scroll" key={table.url + heading + index}>
+          <div className="router-table-source">{table.page_title || "Router page"} · {table.url}</div>
+          <table className="data-table"><thead><tr>{table.headers.map((header) => <th key={header}>{header}</th>)}</tr></thead>
+            <tbody>{table.rows.map((row, rowIndex) => <tr key={rowIndex}>{table.headers.map((header) => <td key={header}>{row[header] || "—"}</td>)}</tr>)}</tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  );
   return <section className="panel network-config">
     <div className="panel-title"><div><div className="eyebrow">NETWORK INTEGRATION / ROUTER</div><h2>Connect to router administration</h2></div><span className="section-note">LOCAL NETWORK ONLY</span></div>
-    <div className="network-controls">
+    <div className="router-connect-grid">
       <label><span>ROUTER ADMINISTRATION URL</span><input className="router-address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="http://192.168.1.1/admin/login.asp" autoComplete="url" /></label>
-      <ActionButton onClick={() => void inspect()} disabled={busy || !address.trim()}>{busy ? "Inspecting…" : "Inspect router →"}</ActionButton>
+      <ActionButton secondary onClick={() => void inspect()} disabled={busy || !address.trim()}>{busy ? "Working…" : "Inspect login page"}</ActionButton>
+      <label><span>ADMIN USERNAME</span><input className="router-address" value={username} onChange={(event) => setUsername(event.target.value)} onChangeCapture={undefined} autoComplete="username" placeholder="Router admin username" /></label>
+      <label><span>ADMIN PASSWORD</span><input className="router-address" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" placeholder="Entered only for this connection" /></label>
+      <ActionButton onClick={() => void connect()} disabled={busy || !address.trim() || !username.trim() || !password}>{busy ? "Connecting…" : "Connect read-only →"}</ActionButton>
     </div>
     {error && <div className="scan-error">{error}</div>}
-    {result && <div className="router-probe-result">
-      <div className="scan-state-row"><span className={"scan-state " + (result.reachable ? "completed" : "failed")}>{result.status.replace(/_/g, " ")}</span><span className="section-note">HTTP {result.http_status ?? "—"}</span></div>
+    {probe && <div className="router-probe-result">
+      <div className="scan-state-row"><span className={"scan-state " + (probe.reachable ? "completed" : "failed")}>{probe.status.replace(/_/g, " ")}</span><span className="section-note">HTTP {probe.http_status ?? "—"}</span></div>
       <div className="router-result-grid">
-        <Resource label="PAGE TITLE" value={result.title || "Untitled page"} detail={result.final_url} />
-        <Resource label="VENDOR HINT" value={result.vendor_hint ?? "Unknown"} detail="Detected from visible page content" />
-        <Resource label="LOGIN FORM" value={result.login_form_detected ? "Detected" : "Not detected"} detail={(result.password_fields ?? 0) + " password fields"} />
-        <Resource label="CAPABILITIES" value={String(result.capabilities.length)} detail="Not yet verified" />
+        <Resource label="PAGE TITLE" value={probe.title || "Untitled page"} detail={probe.final_url} />
+        <Resource label="VENDOR HINT" value={probe.vendor_hint ?? "Unknown"} detail="Page-content hint only" />
+        <Resource label="LOGIN FORM" value={probe.login_form_detected ? "Detected" : "Not detected"} detail={String(probe.password_fields ?? 0) + " password fields"} />
+        <Resource label="AUTHENTICATION" value="Not yet verified" detail="Connect to test supported form login" />
       </div>
-      <p className="router-message">{result.message}</p>
-      {result.security_note && <p className="router-message">{result.security_note}</p>}
+      <p className="router-message">{probe.message}</p>
     </div>}
-    <div className="scope-note"><span className="scope-mark">i</span><p>Initial discovery only checks a private IPv4 router page. It does not submit credentials, store passwords, follow redirects, or change router settings. Once the page and supported interface are identified, we can add a compatible authenticated connector for device inventory, traffic statistics and access control.</p></div>
+    {connection && <div className="router-probe-result">
+      <div className="scan-state-row"><span className="scan-state completed">AUTHENTICATED SESSION</span><span className="section-note">IN-MEMORY · {Math.floor(connection.expires_in_seconds / 60)} MIN TTL</span></div>
+      <div className="router-result-grid">
+        <Resource label="VENDOR HINT" value={connection.vendor_hint} detail="Detected from router page" />
+        <Resource label="DEVICE INVENTORY" value={snapshot?.capabilities.device_inventory ? "Available" : "Not exposed"} detail="Router tables inspected" />
+        <Resource label="PER-DEVICE TRAFFIC" value={snapshot?.capabilities.per_device_traffic ? "Available" : "Not exposed"} detail="Upload / download counters" />
+        <Resource label="DOMAIN ACTIVITY" value={snapshot?.capabilities.domain_activity ? "Available" : "Not exposed"} detail="Router domain/history tables" />
+      </div>
+      {connection.transport_warning && <div className="scan-error">{connection.transport_warning} Avoid connecting over untrusted Wi-Fi or shared networks.</div>}
+      <div className="router-session-actions"><ActionButton secondary onClick={() => void reloadSnapshot()} disabled={busy}>{busy ? "Refreshing…" : "Refresh router data"}</ActionButton><ActionButton secondary onClick={() => void disconnect()} disabled={busy}>Disconnect</ActionButton></div>
+      {snapshot && <>
+        <p className="router-message">Read {snapshot.pages_inspected.length} same-origin administration pages at {formatDate(snapshot.collected_at)}. {connection.message}</p>
+        {renderTables("CONNECTED DEVICE TABLES", snapshot.devices, "This router did not expose a recognisable connected-device table to the generic reader.")}
+        {renderTables("PER-DEVICE TRAFFIC TABLES", snapshot.traffic, "Per-device upload/download counters were not exposed in the pages inspected.")}
+        {renderTables("DOMAIN / WEBSITE ACTIVITY", snapshot.domains, "No domain or website history table was exposed. HTTPS and encrypted DNS activity may not be visible even when a router provides logs.")}
+        <div className="router-data-section"><div className="result-heading"><h3>Device access control</h3><span>NOT AVAILABLE</span></div><div className="empty-state">SENTINEL has not found a verified block/unblock interface for this router. No device will be disconnected or blocked until a model-specific control is identified and confirmed.</div></div>
+        <ul className="router-limitations">{snapshot.limitations.map((item) => <li key={item}>{item}</li>)}</ul>
+      </>}
+    </div>}
+    <div className="scope-note"><span className="scope-mark">i</span><p>Credentials are sent only to a detected same-origin HTML POST login form and are not saved. Session cookies stay in backend memory for up to 30 minutes. JavaScript challenge-response logins require a vendor-specific adapter. Router pages are read-only; unsupported device blocking is never simulated.</p></div>
   </section>;
 }
 
