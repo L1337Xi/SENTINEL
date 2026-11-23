@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 import psutil
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 from .config import CORS_ORIGINS, MAX_PAGE_SIZE
 from .database import (
@@ -17,6 +18,8 @@ from .database import (
     create_alert,
     create_case,
     create_scan,
+    delete_completed_system_scans,
+    delete_system_scan,
     initialize_database,
     link_event_to_case,
     list_alerts,
@@ -39,7 +42,18 @@ from .database import (
 )
 from .database import get_case as fetch_case
 from .detections import RULES, evaluate_event
+from .editions import edition_manifest
 from .evidence import router as evidence_router
+from .file_response import (
+    investigate_file,
+    list_quarantine,
+    permanently_delete_file,
+    quarantine_file,
+    restore_quarantined,
+)
+from .host_assessment import run_host_assessment
+from .integration_settings import provider_status, save_provider_keys, verify_provider
+from .router_integration import inspect_router_login, login_router, logout_router, router_snapshot
 from .scanner import network_discovery, system_inventory, validate_local_network
 from .schemas import (
     AlertUpdate,
@@ -65,7 +79,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PATCH"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
 )
 
@@ -76,6 +90,88 @@ def on_startup() -> None:
 
 
 app.include_router(evidence_router)
+
+
+@app.get("/api/edition", tags=["system"])
+def get_edition() -> dict:
+    """Return the configured edition and its published capability catalogue."""
+    return edition_manifest()
+
+
+class IntegrationKeysUpdate(BaseModel):
+    malwarebazaar: str | None = Field(default=None, max_length=512)
+    virustotal: str | None = Field(default=None, max_length=512)
+    malwarebytes_client_id: str | None = Field(default=None, max_length=512)
+    malwarebytes_client_secret: str | None = Field(default=None, max_length=512)
+    malwarebytes_account_id: str | None = Field(default=None, max_length=512)
+
+
+@app.get("/api/integrations/keys", tags=["integrations"])
+def get_integration_keys() -> dict:
+    """Return provider configuration state only; never disclose stored secrets."""
+    return provider_status()
+
+
+@app.put("/api/integrations/keys", tags=["integrations"])
+def put_integration_keys(payload: IntegrationKeysUpdate) -> dict:
+    """Save or clear optional provider credentials without returning their values."""
+    try:
+        return save_provider_keys(payload.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/integrations/{provider}/verify", tags=["integrations"])
+def verify_integration_provider(provider: str) -> dict:
+    """Perform a bounded authenticated request against the provider's official API."""
+    try:
+        return verify_provider(provider)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+class RouterProbeRequest(BaseModel):
+    address: str = Field(min_length=8, max_length=256)
+
+
+class RouterLoginRequest(RouterProbeRequest):
+    username: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=1, max_length=256)
+
+
+@app.post("/api/network/router/probe", tags=["network monitoring"])
+def probe_router(payload: RouterProbeRequest) -> dict:
+    """Inspect a private router login page without submitting credentials."""
+    try:
+        return inspect_router_login(payload.address)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (OSError, TimeoutError) as exc:
+        raise HTTPException(status_code=502, detail=f"Router page could not be reached: {str(exc)[:200]}") from exc
+
+
+@app.post("/api/network/router/login", tags=["network monitoring"])
+def connect_router(payload: RouterLoginRequest) -> dict:
+    """Authenticate to a detected same-origin router form; credentials are never persisted."""
+    try:
+        return login_router(payload.address, payload.username, payload.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (OSError, TimeoutError) as exc:
+        raise HTTPException(status_code=502, detail=f"Router login failed: {str(exc)[:200]}") from exc
+
+
+@app.get("/api/network/router/{session_id}/snapshot", tags=["network monitoring"])
+def get_router_snapshot(session_id: str) -> dict:
+    try:
+        return router_snapshot(session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.delete("/api/network/router/{session_id}", tags=["network monitoring"])
+def disconnect_router(session_id: str) -> dict:
+    return {"disconnected": logout_router(session_id)}
 
 
 @app.get("/api/health", tags=["system"])
@@ -155,10 +251,22 @@ def get_event(event_id: str) -> dict:
 
 
 def _execute_scan(scan_id: str, scan_type: str, target: str) -> None:
-    update_scan(scan_id, status="running")
+    update_scan(scan_id, status="running", progress={
+        "phase": "starting", "current_path": None, "files_seen": 0,
+        "files_hashed": 0, "bytes_hashed": 0, "malware_matches": 0,
+        "script_indicators": 0, "elapsed_seconds": 0,
+        "time_budget_seconds": 180, "time_budget_remaining": 180,
+    })
     try:
         result = system_inventory() if scan_type == "system" else network_discovery(target)
-        update_scan(scan_id, status="completed", result=result, completed_at=datetime.now(UTC).isoformat())
+        if scan_type == "system":
+            def report_progress(progress: dict) -> None:
+                update_scan(scan_id, status="running", progress=progress)
+            result["security_assessment"] = run_host_assessment(progress_callback=report_progress)
+        final_progress = {"phase": "completed", "current_path": None}
+        if scan_type == "system":
+            final_progress.update(result.get("security_assessment", {}).get("summary", {}))
+        update_scan(scan_id, status="completed", result=result, progress=final_progress, completed_at=datetime.now(UTC).isoformat())
     except (OSError, RuntimeError, ValueError, TypeError, sqlite3.Error, psutil.Error) as exc:
         update_scan(scan_id, status="failed", error=str(exc)[:500], completed_at=datetime.now(UTC).isoformat())
 
@@ -172,6 +280,112 @@ def list_scans(limit: int = Query(default=20, ge=1, le=100)) -> dict:
     return {"items": [row_to_scan(row) for row in rows]}
 
 
+def _store_finding_metadata(scan_id: str, finding_id: str, key: str, value: dict) -> None:
+    with session() as connection:
+        row = connection.execute("SELECT result FROM scans WHERE id = ?", (scan_id,)).fetchone()
+        if row is None or not row["result"]:
+            raise HTTPException(status_code=404, detail="Host assessment result not found.")
+        result = json.loads(row["result"])
+        findings = result.get("security_assessment", {}).get("findings", [])
+        target = next((item for item in findings if str(item.get("id")) == finding_id), None)
+        if target is None:
+            raise HTTPException(status_code=404, detail="Finding not found.")
+        target[key] = value
+        connection.execute(
+            "UPDATE scans SET result = ? WHERE id = ?",
+            (json.dumps(result, separators=(",", ":"), ensure_ascii=False), scan_id),
+        )
+
+
+def _get_scan_finding(scan_id: str, finding_id: str) -> dict:
+    with session() as connection:
+        row = connection.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
+    if row is None or row["scan_type"] != "system" or row["status"] != "completed":
+        raise HTTPException(status_code=404, detail="Completed host assessment not found.")
+    scan = row_to_scan(row)
+    result = scan.get("result") or {}
+    assessment = result.get("security_assessment") or {}
+    for finding in assessment.get("findings", []):
+        if str(finding.get("id")) == finding_id and finding.get("category") == "malware":
+            if not finding.get("path") or not finding.get("sha256"):
+                raise HTTPException(status_code=422, detail="Finding has no verified file path and SHA-256.")
+            return finding
+    raise HTTPException(status_code=404, detail="Malware finding not found in this scan.")
+
+
+@app.post("/api/scans/{scan_id}/findings/{finding_id}/investigate", tags=["host response"])
+def investigate_host_finding(scan_id: str, finding_id: str) -> dict:
+    finding = _get_scan_finding(scan_id, finding_id)
+    try:
+        report = investigate_file(str(finding["path"]), str(finding["sha256"]))
+    except (OSError, ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    now = datetime.now(UTC).isoformat()
+    _store_finding_metadata(scan_id, finding_id, "investigation", report)
+    with session() as connection:
+        append_audit(connection, "scan", scan_id, "finding.investigated", now,
+                     {"finding_id": finding_id, "sha256": report["sha256"],
+                      "verdict": report["assessment"]["verdict"]})
+    return report
+
+
+@app.post("/api/scans/{scan_id}/findings/{finding_id}/response", tags=["host response"])
+def respond_to_host_finding(scan_id: str, finding_id: str, payload: dict) -> dict:
+    finding = _get_scan_finding(scan_id, finding_id)
+    action = str(payload.get("action", ""))
+    try:
+        analysis = investigate_file(str(finding["path"]), str(finding["sha256"]))
+        if analysis["assessment"]["verdict"] == "likely_false_positive":
+            raise HTTPException(
+                status_code=409,
+                detail="Package-integrity evidence supports a likely false positive. SENTINEL will not quarantine or delete this file.",
+            )
+        if action == "quarantine":
+            result = quarantine_file(str(finding["path"]), str(finding["sha256"]),
+                                     scan_id=scan_id, finding_id=finding_id)
+        elif action == "delete":
+            result = permanently_delete_file(str(finding["path"]), str(finding["sha256"]),
+                                             str(payload.get("confirmation", "")))
+        else:
+            raise HTTPException(status_code=422, detail="Action must be quarantine or delete.")
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    now = datetime.now(UTC).isoformat()
+    _store_finding_metadata(scan_id, finding_id, "response_action",
+                            {"action": action, "result": result, "occurred_at": now})
+    with session() as connection:
+        append_audit(connection, "scan", scan_id, f"finding.{action}", now,
+                     {"finding_id": finding_id, "sha256": finding["sha256"], "path": finding["path"]})
+    return result
+
+
+@app.get("/api/quarantine", tags=["host response"])
+def get_quarantine() -> dict:
+    return {"items": list_quarantine()}
+
+
+@app.post("/api/quarantine/{item_id}/restore", tags=["host response"])
+def restore_quarantine_item(item_id: str) -> dict:
+    try:
+        result = restore_quarantined(item_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Quarantine item not found.") from exc
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    now = datetime.now(UTC).isoformat()
+    if result.get("scan_id") and result.get("finding_id"):
+        _store_finding_metadata(
+            str(result["scan_id"]), str(result["finding_id"]), "response_action",
+            {"action": "restored", "result": result, "occurred_at": now},
+        )
+    with session() as connection:
+        append_audit(connection, "scan", item_id, "quarantine.restored", now,
+                     {"path": result["path"], "sha256": result["sha256"]})
+    return result
+
+
 @app.get("/api/scans/{scan_id}", tags=["scans"])
 def get_scan(scan_id: str) -> dict:
     with session() as connection:
@@ -179,6 +393,27 @@ def get_scan(scan_id: str) -> dict:
     if row is None:
         raise HTTPException(status_code=404, detail="Scan not found.")
     return row_to_scan(row)
+
+
+@app.delete("/api/scans/system", tags=["scans"])
+def clear_host_scan_history() -> dict:
+    deleted = delete_completed_system_scans(datetime.now(UTC).isoformat())
+    return {"deleted": deleted, "message": f"Deleted {deleted} completed host scan record(s)."}
+
+
+@app.delete("/api/scans/{scan_id}", tags=["scans"])
+def delete_host_scan(scan_id: str) -> dict:
+    try:
+        normalized_id = str(UUID(scan_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Host scan not found.") from exc
+    deleted = delete_system_scan(normalized_id, datetime.now(UTC).isoformat())
+    if deleted is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Only completed or failed host assessment records can be deleted. Network and active scans are protected.",
+        )
+    return {"id": normalized_id, "deleted": True}
 
 
 @app.post("/api/scans/system", status_code=202, tags=["scans"])
@@ -331,7 +566,7 @@ def get_case_history(case_id: str, limit: int=Query(default=200,ge=1,le=500)) ->
 def get_audit_log(
     limit: int = Query(default=100, ge=1, le=500),
     entity_type: str | None = Query(
-        default=None, pattern="^(event|alert|case|evidence)$"
+        default=None, pattern="^(event|alert|case|evidence|scan)$"
     ),
 ) -> dict:
     rows = list_audit_log(limit, entity_type)

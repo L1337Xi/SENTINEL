@@ -1,5 +1,12 @@
 # Development roadmap
 
+## Edition foundation
+- [x] Define Normal and Advanced edition catalogue on a shared codebase.
+- [x] Default deployments to Normal and expose edition metadata through the API.
+- [ ] Implement signed commercial entitlement verification before enforcing Advanced access.
+- [ ] Finalize Normal open-source licence and separate Advanced commercial licence.
+- [ ] Implement and test Advanced capabilities before marking them available.
+
 - [x] Initial FastAPI service and health endpoint
 - [x] SQLite-backed event ingestion and retrieval
 - [x] React/TypeScript dashboard connected to the API
