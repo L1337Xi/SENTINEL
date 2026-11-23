@@ -767,6 +767,7 @@ function NetworkView({ networks, selected, setSelected, scan, scans, busy, onSta
     <PageHeading eyebrow="ASSESSMENT / NETWORK" title="Network discovery" description="Identify responsive devices and common TCP services on an attached private subnet.">
       <ActionButton secondary onClick={onReload}>↻ Refresh interfaces</ActionButton>
     </PageHeading>
+    <RouterConnectionPanel />
     <section className="panel network-config">
       <div className="panel-title"><div><div className="eyebrow">SCAN CONFIGURATION</div><h2>Choose a local network</h2></div><span className="section-note">PRIVATE IPV4 ONLY</span></div>
       <div className="network-controls"><label><span>ATTACHED NETWORK / CIDR</span><select value={selected} onChange={(event) => setSelected(event.target.value)} disabled={networks.length === 0}>{networks.map((item) => <option key={item.network + item.interface} value={item.network}>{item.interface} · {item.network} · {item.address}</option>)}</select></label><ActionButton onClick={onStart} disabled={busy || !selected}>{busy ? "Starting…" : "Start discovery →"}</ActionButton></div>
@@ -783,6 +784,39 @@ function NetworkView({ networks, selected, setSelected, scan, scans, busy, onSta
   </>;
 }
 
+
+function RouterConnectionPanel() {
+  const [address, setAddress] = useState("http://192.168.1.1/");
+  const [result, setResult] = useState<Awaited<ReturnType<typeof api.probeRouter>> | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function inspect() {
+    setBusy(true); setError(""); setResult(null);
+    try { setResult(await api.probeRouter(address)); }
+    catch (err) { setError(err instanceof Error ? err.message : "Router discovery failed."); }
+    finally { setBusy(false); }
+  }
+  return <section className="panel network-config">
+    <div className="panel-title"><div><div className="eyebrow">NETWORK INTEGRATION / ROUTER</div><h2>Connect to router administration</h2></div><span className="section-note">LOCAL NETWORK ONLY</span></div>
+    <div className="network-controls">
+      <label><span>ROUTER ADMINISTRATION URL</span><input className="router-address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="http://192.168.1.1/admin/login.asp" autoComplete="url" /></label>
+      <ActionButton onClick={() => void inspect()} disabled={busy || !address.trim()}>{busy ? "Inspecting…" : "Inspect router →"}</ActionButton>
+    </div>
+    {error && <div className="scan-error">{error}</div>}
+    {result && <div className="router-probe-result">
+      <div className="scan-state-row"><span className={"scan-state " + (result.reachable ? "completed" : "failed")}>{result.status.replaceAll("_", " ")}</span><span className="section-note">HTTP {result.http_status ?? "—"}</span></div>
+      <div className="router-result-grid">
+        <Resource label="PAGE TITLE" value={result.title || "Untitled page"} detail={result.final_url} />
+        <Resource label="VENDOR HINT" value={result.vendor_hint ?? "Unknown"} detail="Detected from visible page content" />
+        <Resource label="LOGIN FORM" value={result.login_form_detected ? "Detected" : "Not detected"} detail={(result.password_fields ?? 0) + " password fields"} />
+        <Resource label="CAPABILITIES" value={String(result.capabilities.length)} detail="Not yet verified" />
+      </div>
+      <p className="router-message">{result.message}</p>
+      {result.security_note && <p className="router-message">{result.security_note}</p>}
+    </div>}
+    <div className="scope-note"><span className="scope-mark">i</span><p>Initial discovery only checks a private IPv4 router page. It does not submit credentials, store passwords, follow redirects, or change router settings. Once the page and supported interface are identified, we can add a compatible authenticated connector for device inventory, traffic statistics and access control.</p></div>
+  </section>;
+}
 
 function IntegrationSettingsView() {
   const [status, setStatus] = useState<IntegrationKeysStatus | null>(null);
